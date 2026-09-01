@@ -76,7 +76,7 @@ test_*.py
 *_test.py
 
 # Documentation files (not needed for deployment)
-*.docx
+# *.docx  # 允许项目文档被跟踪
 docs/
 
 # Package lock files (optional, can be committed if preferred)
