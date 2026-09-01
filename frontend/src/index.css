@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    font-family: '"PingFang SC"', '"Microsoft YaHei"', '"Hiragino Sans GB"', system-ui, sans-serif;
+    background-color: #fdfaf3;
+    background-image:
+      radial-gradient(circle at 10% 20%, rgba(232, 207, 106, 0.08) 0%, transparent 40%),
+      radial-gradient(circle at 90% 80%, rgba(107, 164, 201, 0.08) 0%, transparent 40%),
+      radial-gradient(circle at 50% 50%, rgba(255, 248, 220, 0.4) 0%, transparent 70%);
+    color: #3b332b;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* 纸张噪点纹理 */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.08'/%3E%3C/svg%3E");
+  }
+}
+
+@layer components {
+  .sketch-card {
+    @apply bg-paper-50 border-2 border-ink/20 rounded-sketch shadow-sketch relative;
+  }
+  .sketch-card::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    border: 1px dashed rgba(59,51,43,0.1);
+    pointer-events: none;
+  }
+  .sketch-btn {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 font-medium rounded-sketch-sm shadow-sketch-sm border-2 transition-all duration-200 active:translate-x-[2px] active:translate-y-[2px] active:shadow-none select-none;
+  }
+  .sketch-btn-primary {
+    @apply sketch-btn bg-sketch-blue text-white border-sketch-blueDeep hover:bg-sketch-blueDeep;
+  }
+  .sketch-btn-secondary {
+    @apply sketch-btn bg-paper-100 text-ink border-ink/30 hover:bg-paper-200;
+  }
+  .sketch-btn-warm {
+    @apply sketch-btn bg-sketch-orange text-white border-sketch-orangeDeep hover:bg-sketch-orangeDeep;
+  }
+  .sketch-btn-success {
+    @apply sketch-btn bg-sketch-green text-white border-sketch-greenDeep hover:bg-sketch-greenDeep;
+  }
+  .sketch-input {
+    @apply w-full px-4 py-2.5 bg-paper-50 border-2 border-ink/20 rounded-sketch-sm shadow-sketch-sm focus:border-sketch-blue focus:outline-none transition-colors;
+  }
+  .sketch-tag {
+    @apply inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-full border-2 shadow-sm;
+  }
+  .sketch-divider {
+    @apply border-none h-px bg-gradient-to-r from-transparent via-ink/20 to-transparent my-4;
+  }
+  .handwritten {
+    font-family: '"Comic Sans MS"', '"Kaiti SC"', '"KaiTi"', '"Segoe Print"', cursive;
+  }
+  .dashed-border {
+    border-style: dashed !important;
+  }
+}
+
+@layer utilities {
+  .scrollbar-sketch::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-sketch::-webkit-scrollbar-track {
+    background: #f9f2e1;
+    border-radius: 4px;
+  }
+  .scrollbar-sketch::-webkit-scrollbar-thumb {
+    background: #c9bfac;
+    border-radius: 4px;
+    border: 1px solid #b8b0a0;
+  }
+  .scrollbar-sketch::-webkit-scrollbar-thumb:hover {
+    background: #a89880;
+  }
+}
