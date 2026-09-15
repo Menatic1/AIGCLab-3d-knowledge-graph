@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, BookOpen, Link2, CheckCircle2, CircleDot, ExternalLink, Star, Tag, Play, Loader2, Search } from 'lucide-react';
+import { X, BookOpen, Link2, CircleDot, ExternalLink, Star, Tag, Play, Loader2, Search, ClipboardCheck } from 'lucide-react';
 import type { KnowledgeNode } from '../../types';
 import { CATEGORY_META } from '../../mock/sampleKnowledgeGraph';
 import { useKnowledge } from '../../context/KnowledgeContext';
@@ -25,6 +25,7 @@ interface Props {
   onJump?: (nodeId: string) => void;
   relatedNodes?: KnowledgeNode[];
   onStudy?: () => void;
+  onQuiz?: () => void;
   variant?: 'panel' | 'page';
 }
 
@@ -33,8 +34,8 @@ function formatCount(n: number): string {
   return String(n);
 }
 
-export default function NodeDetailCard({ node, onClose, onJump, onStudy, variant = 'panel', relatedNodes = [] }: Props) {
-  const { masteredIds, toggleMastered, graph } = useKnowledge();
+export default function NodeDetailCard({ node, onClose, onJump, onStudy, onQuiz, variant = 'panel', relatedNodes = [] }: Props) {
+  const { masteredIds, graph } = useKnowledge();
 
   // B站视频搜索
   const [videos, setVideos] = useState<BiliVideo[]>([]);
@@ -318,15 +319,10 @@ export default function NodeDetailCard({ node, onClose, onJump, onStudy, variant
           </button>
         ) : (
           <button
-            onClick={() => toggleMastered(node.id)}
-            className={
-              'w-full sketch-btn ' +
-              (mastered
-                ? 'bg-paper-200 text-ink border-ink/30 hover:bg-paper-50'
-                : 'bg-sketch-green text-white border-sketch-greenDeep hover:bg-sketch-greenDeep')
-            }
+            onClick={onQuiz}
+            className="w-full sketch-btn bg-sketch-green text-white border-sketch-greenDeep hover:bg-sketch-greenDeep"
           >
-            {mastered ? <><CheckCircle2 size={16} /> 已掌握 · 点击取消</> : <><CheckCircle2 size={16} /> 标记为已掌握</>}
+            <ClipboardCheck size={16} /> {mastered ? '再次进入小测试' : '进入小测试'}
           </button>
         )}
       </div>

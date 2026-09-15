@@ -120,3 +120,56 @@ class LearningPathOut(BaseModel):
     steps: List[PathStep]
     total_steps: int
     remaining: int
+
+
+# ---------------- Adaptive learning / Quiz ----------------
+LearningPreference = Literal["reinforce", "balanced", "challenge"]
+
+
+class QuizSubmitRequest(BaseModel):
+    node_id: str = Field(..., min_length=1, max_length=64)
+    correct_count: int = Field(..., ge=0, le=100)
+    total_count: int = Field(..., ge=1, le=100)
+
+
+class QuizAttemptOut(BaseModel):
+    id: int
+    node_id: str
+    correct_count: int
+    total_count: int
+    accuracy: float
+    passed: bool
+    completed_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class LearningPreferenceUpdate(BaseModel):
+    preference: LearningPreference
+
+
+class LearningRecommendationOut(BaseModel):
+    node_id: str
+    name: str
+    category: str
+    description: Optional[str] = None
+    importance: float = 3.0
+    priority: int
+    prerequisites: List[str] = []
+    missing_prerequisites: List[str] = []
+    latest_accuracy: Optional[float] = None
+    reason: str
+
+
+class LearningReportOut(BaseModel):
+    user_id: str
+    learning_preference: LearningPreference
+    total_nodes: int
+    mastered_nodes: int
+    mastery_rate: float
+    mastered_node_ids: List[str] = []
+    quiz_count: int
+    average_accuracy: Optional[float] = None
+    weak_node_ids: List[str] = []
+    recent_attempts: List[QuizAttemptOut] = []

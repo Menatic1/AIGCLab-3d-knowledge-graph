@@ -6,10 +6,13 @@ import type {
   ChatMessage,
   PathRecommendation,
   PathStage,
+  LearningPreference,
+  QuizAttempt,
 } from '../types';
 import { sampleKnowledgeGraph, qaKnowledgeBase, initialMessages } from '../mock/sampleKnowledgeGraph';
 import { mapBackendGraph, API_BASE } from '../lib/graphMap';
-import { authedFetch } from './AuthContext';
+import { authedFetch, useAuth } from './AuthContext';
+import { fetchLearningReport, persistLearningPreference, persistQuizResult } from '../api/learning';
 
 // ==================== 推荐算法 ====================
 /**
@@ -25,7 +28,9 @@ import { authedFetch } from './AuthContext';
  */
 function buildRecommendations(
   graph: KnowledgeGraph,
-  masteredIds: Set<string>
+  masteredIds: Set<string>,
+  quizAttempts: QuizAttempt[],
+  preference: LearningPreference,
 ): { recommendations: PathRecommendation[]; stages: PathStage[] } {
   const prereqMap = new Map<string, string[]>(); // nodeId -> list of prerequisite nodeIds
   graph.relations.forEach((r) => {
@@ -38,6 +43,15 @@ function buildRecommendations(
   });
 
   const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
+  const latestAttemptByNode = new Map<string, QuizAttempt>();
+  quizAttempts.forEach((attempt) => latestAttemptByNode.set(attempt.nodeId, attempt));
+  const weakNodeIds = new Set(
+    [...latestAttemptByNode.values()]
+      .filter((attempt) => attempt.accuracy < 67)
+      .map((attempt) => attempt.nodeId),
+  );
+  const prerequisiteForWeakNodes = new Set<string>();
+  weakNodeIds.forEach((id) => (prereqMap.get(id) ?? []).forEach((pre) => prerequisiteForWeakNodes.add(pre)));
 
   const scored: PathRecommendation[] = [];
   graph.nodes.forEach((n) => {
@@ -46,6 +60,24 @@ function buildRecommendations(
     const satisfied = pres.filter((p) => masteredIds.has(p));
     const missing = pres.filter((p) => !masteredIds.has(p));
     const ratio = pres.length === 0 ? 0.5 : satisfied.length / pres.length; // 无前序也有推荐价值
+    const latestAttempt = latestAttemptByNode.get(n.id);
+    const isWeak = !!latestAttempt && latestAttempt.accuracy < 67;
+    const isWeakPrerequisite = prerequisiteForWeakNodes.has(n.id);
+    const preferenceBoost = preference === 'reinforce'
+      ? (isWeak ? 28 : isWeakPrerequisite ? 18 : 0)
+      : preference === 'challenge'
+        ? (n.importance >= 4 && ratio >= 0.5 ? 12 : 0)
+        : 0;
+    const score = ratio * 50 + n.importance * 7 + preferenceBoost + (isWeak ? 10 : 0);
+    const reason = isWeak
+      ? `上次测试正确率 ${latestAttempt!.accuracy}% ，建议优先巩固`
+      : isWeakPrerequisite
+        ? '是薄弱知识点的前置基础，建议先补齐'
+        : preference === 'challenge' && n.importance >= 4
+          ? '符合你的挑战进阶偏好，且属于重点知识'
+          : missing.length === 0
+            ? '前置知识已满足，可以开始学习'
+            : `已满足 ${satisfied.length}/${pres.length} 个前置知识`;
     scored.push({
       nodeId: n.id,
       nodeName: n.name,
@@ -53,17 +85,17 @@ function buildRecommendations(
       satisfiedPrerequisites: satisfied,
       missingPrerequisites: missing,
       learningOrder: 0,
+      reason,
+      latestAccuracy: latestAttempt?.accuracy,
     });
     // 内部字段用于排序
-    (scored[scored.length - 1] as any)._ratio = ratio;
-    (scored[scored.length - 1] as any)._importance = n.importance;
+    (scored[scored.length - 1] as any)._score = score;
     (scored[scored.length - 1] as any)._missingCount = missing.length;
   });
 
   scored.sort((a, b) => {
     const A = a as any, B = b as any;
-    if (B._ratio !== A._ratio) return B._ratio - A._ratio;
-    if (B._importance !== A._importance) return B._importance - A._importance;
+    if (B._score !== A._score) return B._score - A._score;
     return A._missingCount - B._missingCount;
   });
 
@@ -141,6 +173,12 @@ interface KnowledgeContextValue {
   markAsMastered: (id: string) => void;
   markAsNotMastered: (id: string) => void;
   toggleMastered: (id: string) => void;
+  // 测试与学习画像
+  quizAttempts: QuizAttempt[];
+  weakNodeIds: Set<string>;
+  submitQuiz: (nodeId: string, correct: number, total: number) => QuizAttempt;
+  learningPreference: LearningPreference;
+  setLearningPreference: (preference: LearningPreference) => void;
   // 推荐
   recommendations: PathRecommendation[];
   pathStages: PathStage[];
@@ -160,18 +198,62 @@ interface KnowledgeContextValue {
 }
 
 const KnowledgeContext = createContext<KnowledgeContextValue | null>(null);
+const LEARNING_PROFILE_KEY = 'aigc_learning_profile_v1';
+
+function readLearningProfile(): { masteredIds: string[]; quizAttempts: QuizAttempt[]; preference: LearningPreference } {
+  try {
+    const raw = localStorage.getItem(LEARNING_PROFILE_KEY);
+    if (!raw) return { masteredIds: [], quizAttempts: [], preference: 'balanced' };
+    const saved = JSON.parse(raw) as Partial<{ masteredIds: string[]; quizAttempts: QuizAttempt[]; preference: LearningPreference }>;
+    return {
+      masteredIds: Array.isArray(saved.masteredIds) ? saved.masteredIds : [],
+      quizAttempts: Array.isArray(saved.quizAttempts) ? saved.quizAttempts : [],
+      preference: saved.preference === 'reinforce' || saved.preference === 'challenge' ? saved.preference : 'balanced',
+    };
+  } catch {
+    return { masteredIds: [], quizAttempts: [], preference: 'balanced' };
+  }
+}
 
 export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   // 直接进入工作台时展示内置示例图谱，便于无需账号即可浏览完整功能。
   const [graph, setGraph] = useState<KnowledgeGraph | null>(sampleKnowledgeGraph);
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
-  const [masteredIds, setMasteredIds] = useState<Set<string>>(new Set());
+  const [masteredIds, setMasteredIds] = useState<Set<string>>(() => new Set(readLearningProfile().masteredIds));
+  const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>(() => readLearningProfile().quizAttempts);
+  const [learningPreference, setLearningPreferenceState] = useState<LearningPreference>(() => readLearningProfile().preference);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [learningNode, setLearningNode] = useState<KnowledgeNode | null>(null);
   // 保存尚未真正上传的 File 引用（key = docId）
   const fileRefs = useRef<Map<string, File>>(new Map());
 
   const hasGraph = graph !== null;
+
+  useEffect(() => {
+    localStorage.setItem(LEARNING_PROFILE_KEY, JSON.stringify({
+      masteredIds: [...masteredIds], quizAttempts, preference: learningPreference,
+    }));
+  }, [masteredIds, quizAttempts, learningPreference]);
+
+  // 后端可用时，以服务端学习档案恢复本次账号的记录；离线时继续使用本地演示状态。
+  useEffect(() => {
+    let active = true;
+    void fetchLearningReport().then((report) => {
+      if (!active || !report) return;
+      setMasteredIds(new Set(report.mastered_node_ids));
+      setQuizAttempts(report.recent_attempts.slice().reverse().map((attempt) => ({
+        id: `api_${attempt.id}`,
+        nodeId: attempt.node_id,
+        correct: attempt.correct_count,
+        total: attempt.total_count,
+        accuracy: attempt.accuracy,
+        completedAt: attempt.completed_at,
+      })));
+      setLearningPreferenceState(report.learning_preference);
+    });
+    return () => { active = false; };
+  }, [user?.id]);
 
   // 开发辅助：允许浏览器端通过自定义事件注入后端拉取的真实图谱（用于端到端验收）
   useEffect(() => {
@@ -180,6 +262,7 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
       if (kg && Array.isArray(kg.nodes) && Array.isArray(kg.relations)) {
         setGraph(kg);
         setMasteredIds(new Set());
+        setQuizAttempts([]);
         setMessages(initialMessages);
       }
     }
@@ -300,6 +383,7 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
       );
       setGraph(kg);
       setMasteredIds(new Set());
+      setQuizAttempts([]);
       setMessages(initialMessages);
       setDocuments((prev) =>
         prev.map((d) => (d.id === docId ? { ...d, status: 'parsed', progress: 100 } : d)),
@@ -333,6 +417,7 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
       setGraph(sampleKnowledgeGraph);
     }
     setMasteredIds(new Set());
+    setQuizAttempts([]);
     setMessages(initialMessages);
   }, []);
 
@@ -361,12 +446,55 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const submitQuiz = useCallback((nodeId: string, correct: number, total: number) => {
+    const safeTotal = Math.max(1, total);
+    const safeCorrect = Math.max(0, Math.min(correct, safeTotal));
+    const attempt: QuizAttempt = {
+      id: `quiz_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      nodeId,
+      correct: safeCorrect,
+      total: safeTotal,
+      accuracy: Math.round((safeCorrect / safeTotal) * 100),
+      completedAt: new Date().toISOString(),
+    };
+    setQuizAttempts((previous) => [...previous, attempt]);
+    setMasteredIds((previous) => {
+      const next = new Set(previous);
+      if (attempt.accuracy >= 67) next.add(nodeId);
+      else next.delete(nodeId);
+      return next;
+    });
+    void persistQuizResult(nodeId, safeCorrect, safeTotal).then((remote) => {
+      if (!remote) return;
+      setQuizAttempts((previous) => previous.map((item) => item.id === attempt.id ? {
+        id: `api_${remote.id}`,
+        nodeId: remote.node_id,
+        correct: remote.correct_count,
+        total: remote.total_count,
+        accuracy: remote.accuracy,
+        completedAt: remote.completed_at,
+      } : item));
+    });
+    return attempt;
+  }, []);
+
+  const setLearningPreference = useCallback((preference: LearningPreference) => {
+    setLearningPreferenceState(preference);
+    void persistLearningPreference(preference);
+  }, []);
+
+  const weakNodeIds = useMemo(() => {
+    const latest = new Map<string, QuizAttempt>();
+    quizAttempts.forEach((attempt) => latest.set(attempt.nodeId, attempt));
+    return new Set([...latest.values()].filter((attempt) => attempt.accuracy < 67).map((attempt) => attempt.nodeId));
+  }, [quizAttempts]);
+
   // 推荐（在 graph/masteredIds 变化时自动计算）
   const { recommendations, stages: pathStages } = useMemo(() => {
     if (!graph) return { recommendations: [], stages: [] };
-    return buildRecommendations(graph, masteredIds);
+    return buildRecommendations(graph, masteredIds, quizAttempts, learningPreference);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph, masteredIds]);
+  }, [graph, masteredIds, quizAttempts, learningPreference]);
 
   const regenerateRecommendations = useCallback(() => {
     // 目前 useMemo 自动计算，这里保留 API 占位以便后续接后端
@@ -447,6 +575,11 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
     markAsMastered,
     markAsNotMastered,
     toggleMastered,
+    quizAttempts,
+    weakNodeIds,
+    submitQuiz,
+    learningPreference,
+    setLearningPreference,
     recommendations,
     pathStages,
     regenerateRecommendations,

@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import Base, engine, SessionLocal
-from app.routers import auth, documents, graph, progress, learning_path, qa, aigc
+from app.routers import auth, documents, graph, progress, learning_path, qa, aigc, learning
 from app.routers.graph import _upsert_sample
 
 
@@ -36,17 +36,18 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     from sqlalchemy import inspect as sa_inspect
     insp = sa_inspect(engine)
     _mig_cols = {
-        "documents": "user_id",
-        "kg_nodes": "user_id",
-        "kg_relations": "user_id",
+        "users": ("role", "student"),
+        "documents": ("user_id", "default"),
+        "kg_nodes": ("user_id", "default"),
+        "kg_relations": ("user_id", "default"),
     }
     with engine.connect() as conn:
-        for table, col in _mig_cols.items():
+        for table, (col, default) in _mig_cols.items():
             if table in insp.get_table_names():
                 cols = [c["name"] for c in insp.get_columns(table)]
                 if col not in cols:
                     conn.exec_driver_sql(
-                        f'ALTER TABLE "{table}" ADD COLUMN "{col}" VARCHAR(64) DEFAULT "default" NOT NULL'
+                        f'ALTER TABLE "{table}" ADD COLUMN "{col}" VARCHAR(64) DEFAULT "{default}" NOT NULL'
                     )
                     conn.commit()
 
@@ -85,6 +86,7 @@ app.include_router(progress.router)
 app.include_router(learning_path.router)
 app.include_router(qa.router)
 app.include_router(aigc.router)
+app.include_router(learning.router)
 
 
 @app.get("/api/health", tags=["system"])

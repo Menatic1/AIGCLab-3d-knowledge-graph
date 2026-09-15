@@ -6,12 +6,21 @@ import PathVisualization from '../components/learning-path/PathVisualization';
 import { useKnowledge } from '../context/KnowledgeContext';
 
 export default function LearningPathPage() {
-  const { hasGraph, graph, masteredIds, recommendations } = useKnowledge();
+  const { hasGraph, graph, masteredIds, recommendations, setLearningNode } = useKnowledge();
   const { openTab } = useTabs();
 
   const handleFocusNode = (id: string) => {
-    openTab('graph');
-    console.log('[PathPage] focus node', id);
+    const node = graph?.nodes.find((item) => item.id === id);
+    if (!node) return;
+    setLearningNode(node);
+    openTab('learning');
+  };
+
+  const handleStartQuiz = (id: string) => {
+    const node = graph?.nodes.find((item) => item.id === id);
+    if (!node) return;
+    setLearningNode(node);
+    openTab('quiz');
   };
 
   if (!hasGraph || !graph) {
@@ -86,10 +95,10 @@ export default function LearningPathPage() {
       {/* 上方两个工作框，页面整体负责纵向滚动 */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-stretch">
         <div className="h-[620px] min-h-0">
-          <KnowledgeChecklist />
+          <KnowledgeChecklist autoFocus={handleFocusNode} />
         </div>
         <div className="h-[620px] min-h-0">
-          <PathRecommendation onFocusNode={handleFocusNode} />
+          <PathRecommendation onFocusNode={handleFocusNode} onStartQuiz={handleStartQuiz} />
         </div>
       </div>
 

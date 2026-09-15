@@ -25,6 +25,7 @@ class User(Base):
     username = Column(String(64), nullable=False, unique=True, index=True)
     hashed_password = Column(String(256), nullable=False)
     salt = Column(String(128), nullable=False)
+    role = Column(String(16), nullable=False, default="student")
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -94,6 +95,30 @@ class UserProgress(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     node = relationship("KGNode", back_populates="progress_list")
+
+
+class LearningProfile(Base):
+    """学生学习偏好；允许 default 访客使用同一套学习接口。"""
+    __tablename__ = "learning_profiles"
+
+    user_id = Column(String(64), primary_key=True)
+    learning_preference = Column(String(16), nullable=False, default="balanced")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class QuizAttempt(Base):
+    """知识点小测试记录，用于生成学习报告与薄弱点推荐。"""
+    __tablename__ = "quiz_attempts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(64), nullable=False, default="default", index=True)
+    node_id = Column(String(64), ForeignKey("kg_nodes.id", ondelete="CASCADE"), nullable=False, index=True)
+    correct_count = Column(Integer, nullable=False, default=0)
+    total_count = Column(Integer, nullable=False, default=1)
+    accuracy = Column(Float, nullable=False, default=0.0)
+    completed_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    node = relationship("KGNode")
 
 
 class QARecord(Base):

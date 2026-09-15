@@ -6,6 +6,7 @@ import {
   MessageCircle,
   Route,
   BookOpen,
+  ClipboardCheck,
   Sparkles,
   Network,
   type LucideIcon,
@@ -21,6 +22,7 @@ export type TabKind =
   | 'resources'
   | 'aigc'
   | 'learning'
+  | 'quiz'
   | 'visitor';
 
 export interface TabMeta {
@@ -41,6 +43,7 @@ export const TAB_META: Record<TabKind, TabMeta> = {
   resources: { kind: 'resources', title: '相关学习资源', icon: BookOpen,    closable: true,  color: 'from-sketch-green to-sketch-yellow' },
   aigc:      { kind: 'aigc',      title: 'AIGC 生成图谱', icon: Sparkles,   closable: true,  color: 'from-sketch-pink to-sketch-orange' },
   learning:  { kind: 'learning',  title: '详细学习',      icon: BookOpen,    closable: true,  color: 'from-sketch-blue to-sketch-green' },
+  quiz:      { kind: 'quiz',      title: '知识小测试',    icon: ClipboardCheck, closable: true, color: 'from-sketch-green to-sketch-blue' },
   visitor:   { kind: 'visitor',   title: '访客中心',      icon: Network,     closable: true,  color: 'from-sketch-orange to-sketch-red' },
 };
 

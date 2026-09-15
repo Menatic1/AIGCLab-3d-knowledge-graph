@@ -11,6 +11,7 @@ import LearningPathPage from '../../pages/LearningPathPage';
 import AIGCGeneratePage from '../../pages/AIGCGeneratePage';
 import LearningResourcesPage from '../../pages/LearningResourcesPage';
 import LearningPage from '../../pages/LearningPage';
+import QuizPage from '../../pages/QuizPage';
 import VisitorCenterPage from '../../pages/VisitorCenterPage';
 import LoginPage from '../../pages/LoginPage';
 import FloatingAssistant from '../qa/FloatingAssistant';
@@ -25,6 +26,7 @@ function renderPage(kind: TabKind) {
     case 'aigc': return <AIGCGeneratePage />;
     case 'resources': return <LearningResourcesPage />;
     case 'learning': return <LearningPage />;
+    case 'quiz': return <QuizPage />;
     case 'visitor': return <VisitorCenterPage />;
     default: return <HomePage />;
   }

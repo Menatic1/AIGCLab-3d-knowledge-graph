@@ -93,6 +93,20 @@ export interface PathRecommendation {
   satisfiedPrerequisites: string[];
   missingPrerequisites: string[];
   learningOrder: number; // 建议学习顺序
+  reason?: string;
+  latestAccuracy?: number;
+}
+
+export type LearningPreference = 'reinforce' | 'balanced' | 'challenge';
+
+// 每次小测试的答题结果。当前前端以浏览器本地记录为准，后续可直接同步至后端。
+export interface QuizAttempt {
+  id: string;
+  nodeId: string;
+  correct: number;
+  total: number;
+  accuracy: number;
+  completedAt: string;
 }
 
 // 路径阶段

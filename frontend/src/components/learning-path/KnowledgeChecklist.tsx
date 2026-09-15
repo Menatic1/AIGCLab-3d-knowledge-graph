@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Search, CheckSquare, Square, Filter, Star, BookOpenCheck } from 'lucide-react';
+import { Search, CheckSquare, Square, Filter, Star, BookOpenCheck, ChevronRight } from 'lucide-react';
 import { useKnowledge } from '../../context/KnowledgeContext';
 import { CATEGORY_META } from '../../mock/sampleKnowledgeGraph';
 
@@ -8,7 +8,7 @@ interface Props {
 }
 
 export default function KnowledgeChecklist({ autoFocus }: Props) {
-  const { graph, masteredIds, toggleMastered } = useKnowledge();
+  const { graph, masteredIds, weakNodeIds } = useKnowledge();
   const [keyword, setKeyword] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [onlyMastered, setOnlyMastered] = useState<null | boolean>(null); // null=全部 true=已掌握 false=未掌握
@@ -140,26 +140,17 @@ export default function KnowledgeChecklist({ autoFocus }: Props) {
           return (
             <button
               key={n.id}
-              onClick={() => toggleMastered(n.id)}
+              onClick={() => autoFocus?.(n.id)}
               className={
-                'w-full text-left group relative flex items-start gap-2.5 p-3 rounded-sketch-sm border-2 transition-all ' +
+                  'w-full text-left group relative flex items-start gap-2.5 p-3 rounded-sketch-sm border-2 transition-all ' +
                 (checked
-                  ? 'bg-sketch-green/10 border-sketch-green/40 hover:bg-sketch-green/15'
+                    ? 'bg-sketch-green/10 border-sketch-green/40 hover:bg-sketch-green/15'
                   : 'bg-paper-50 border-ink/10 hover:border-sketch-blue/40 hover:bg-white hover:-translate-y-0.5 hover:shadow-sketch-sm')
               }
             >
-              <div
-                className={
-                  'mt-0.5 shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ' +
-                  (checked
-                    ? 'bg-sketch-green border-sketch-greenDeep text-white'
-                    : 'bg-white border-ink/30 group-hover:border-sketch-blueDeep text-transparent')
-                }
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </div>
+                  <div className={'mt-0.5 shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ' + (checked ? 'bg-sketch-green border-sketch-greenDeep text-white' : weakNodeIds.has(n.id) ? 'bg-sketch-orange/20 border-sketch-orangeDeep text-sketch-orangeDeep' : 'bg-white border-ink/30 group-hover:border-sketch-blueDeep text-transparent')}>
+                    {checked ? <CheckSquare size={12} /> : weakNodeIds.has(n.id) ? <span className="text-[11px] font-bold">!</span> : <ChevronRight size={12} />}
+                  </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span

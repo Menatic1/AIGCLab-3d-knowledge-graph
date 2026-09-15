@@ -7,10 +7,16 @@ An AIGC-powered course knowledge graph and learning navigation system. Teachers 
 ```text
 .
 ├── frontend/              React and Vite web application
-│   ├── src/               Pages, 3D graph, learning flow, and UI components
+│   ├── src/api/           Frontend API clients, separated from UI
+│   ├── src/components/    Reusable 3D graph, learning, and layout components
+│   ├── src/context/       Client state and authentication boundaries
+│   ├── src/pages/         Screen-level user flows
 │   └── public/models/     3D campus model assets
 ├── backend/               FastAPI service
-│   ├── app/               API routes, parsing, graph, Q&A, and persistence modules
+│   ├── app/routers/       HTTP endpoints only
+│   ├── app/services/      Adaptive-learning business rules
+│   ├── app/models.py      SQLite persistence models
+│   ├── app/schemas.py     API request and response contracts
 │   └── data/              Runtime data and curated sample materials
 └── docs/                  Teacher and student implementation documentation
 ```
