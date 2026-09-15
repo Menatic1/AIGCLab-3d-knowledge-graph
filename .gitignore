@@ -1,5 +1,23 @@
-node_modules/
-dist/
-.pnpm-store/
-.env
-.env.local
+# Frontend build output and local dependencies
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.pnpm-store/
+/frontend/.env
+/frontend/.env.local
+
+# Backend local runtime, secrets, generated data, and uploaded course files
+/backend/.venv/
+/backend/.env
+/backend/__pycache__/
+/backend/**/__pycache__/
+/backend/**/*.py[cod]
+/backend/data/*.db
+/backend/data/uploads/
+
+# Workspace-only files
+/.pnpm-store/
+/.trae/
+/package-lock.json
+/*.docx
+*.log
+.DS_Store
