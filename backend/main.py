@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import Base, engine, SessionLocal
-from app.routers import auth, documents, graph, progress, learning_path, qa, aigc, learning
+from app.routers import auth, documents, graph, progress, learning_path, qa, aigc, learning, courses, users, course_data, course_learning
 from app.routers.graph import _upsert_sample
 
 
@@ -49,6 +49,23 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
                     conn.exec_driver_sql(
                         f'ALTER TABLE "{table}" ADD COLUMN "{col}" VARCHAR(64) DEFAULT "{default}" NOT NULL'
                     )
+                    conn.commit()
+
+        # New course-scoped records are nullable for backwards compatibility
+        # with the pre-course database created by the first demo version.
+        for table in ("documents", "kg_nodes", "kg_relations", "user_progress", "qa_records"):
+            if table not in insp.get_table_names():
+                continue
+            cols = [c["name"] for c in insp.get_columns(table)]
+            if "course_id" not in cols:
+                conn.exec_driver_sql(f'ALTER TABLE "{table}" ADD COLUMN "course_id" INTEGER')
+                conn.commit()
+            if table == "qa_records":
+                if "feedback_helpful" not in cols:
+                    conn.exec_driver_sql('ALTER TABLE "qa_records" ADD COLUMN "feedback_helpful" BOOLEAN')
+                    conn.commit()
+                if "feedback_comment" not in cols:
+                    conn.exec_driver_sql('ALTER TABLE "qa_records" ADD COLUMN "feedback_comment" VARCHAR(1000)')
                     conn.commit()
 
     # 2) 首次启动（无任何节点）自动注入示例图谱，保证前端一点开就有数据
@@ -87,6 +104,11 @@ app.include_router(learning_path.router)
 app.include_router(qa.router)
 app.include_router(aigc.router)
 app.include_router(learning.router)
+app.include_router(courses.router)
+app.include_router(users.router)
+app.include_router(course_data.course_router)
+app.include_router(course_data.task_router)
+app.include_router(course_learning.router)
 
 
 @app.get("/api/health", tags=["system"])

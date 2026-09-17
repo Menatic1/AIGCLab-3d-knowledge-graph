@@ -29,11 +29,52 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class Course(Base):
+    __tablename__ = "courses"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_id = Column(String(64), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    members = relationship("CourseMember", back_populates="course", cascade="all, delete-orphan")
+
+
+class CourseMember(Base):
+    __tablename__ = "course_members"
+    __table_args__ = (UniqueConstraint("course_id", "user_id", name="uq_course_member"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(String(64), nullable=False, index=True)
+    role = Column(String(16), nullable=False, default="student")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    course = relationship("Course", back_populates="members")
+
+
+class ExtractionTask(Base):
+    __tablename__ = "extraction_tasks"
+
+    id = Column(String(64), primary_key=True)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(32), nullable=False, default="pending")
+    nodes_count = Column(Integer, nullable=False, default=0)
+    relations_count = Column(Integer, nullable=False, default=0)
+    error_msg = Column(String(1024), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class Document(Base):
     __tablename__ = "documents"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String(64), nullable=False, default="default", index=True)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="SET NULL"), nullable=True, index=True)
     filename = Column(String(255), nullable=False)
     stored_path = Column(String(512), nullable=False)
     content_type = Column(String(128), nullable=True)
@@ -53,6 +94,7 @@ class KGNode(Base):
 
     id = Column(String(64), primary_key=True)  # 业务 id：如 n1、协议的 md5 等，和前端一致
     user_id = Column(String(64), nullable=False, default="default", index=True)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="SET NULL"), nullable=True, index=True)
     name = Column(String(255), nullable=False, index=True)
     category = Column(String(64), nullable=False, default="核心概念")
     description = Column(Text, nullable=True)
@@ -73,6 +115,7 @@ class KGRelation(Base):
 
     id = Column(String(64), primary_key=True)
     user_id = Column(String(64), nullable=False, default="default", index=True)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="SET NULL"), nullable=True, index=True)
     source = Column(String(64), ForeignKey("kg_nodes.id", ondelete="CASCADE"), nullable=False, index=True)
     target = Column(String(64), ForeignKey("kg_nodes.id", ondelete="CASCADE"), nullable=False, index=True)
     type = Column(String(64), nullable=False, default="关联")
@@ -89,6 +132,7 @@ class UserProgress(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String(64), nullable=False, default="default", index=True)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=True, index=True)
     node_id = Column(String(64), ForeignKey("kg_nodes.id", ondelete="CASCADE"), nullable=False, index=True)
     mastered = Column(Boolean, nullable=False, default=False)
     score = Column(Float, nullable=False, default=0.0)
@@ -126,8 +170,11 @@ class QARecord(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String(64), nullable=False, default="default", index=True)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=True, index=True)
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
     context_nodes = Column(Text, nullable=True)  # JSON: 命中的节点 id 列表
     used_llm = Column(Boolean, nullable=False, default=False)
+    feedback_helpful = Column(Boolean, nullable=True)
+    feedback_comment = Column(String(1000), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)

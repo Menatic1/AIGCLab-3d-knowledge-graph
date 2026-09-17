@@ -23,7 +23,7 @@ export interface LearningReportResponse {
   recent_attempts: QuizSubmitResponse[];
 }
 
-function authHeaders() {
+function authHeaders(): Record<string, string> {
   const token = localStorage.getItem('aigc_auth_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }

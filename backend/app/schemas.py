@@ -6,6 +6,44 @@ from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
 
 
+class CourseOut(BaseModel):
+    id: int
+    owner_id: str
+    name: str
+    description: Optional[str] = None
+    role: Optional[Literal["owner", "teacher", "student"]] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CourseCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = Field(None, max_length=2000)
+
+
+class CourseUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = Field(None, max_length=2000)
+
+
+class CourseJoinOut(BaseModel):
+    course: CourseOut
+    already_member: bool
+
+
+class UserProfileOut(BaseModel):
+    id: str
+    username: str
+    role: Literal["teacher", "student"]
+
+
+class UserProfileUpdate(BaseModel):
+    username: Optional[str] = Field(None, min_length=2, max_length=32)
+
+
 # ---------------- Graph ----------------
 class KGNodeOut(BaseModel):
     id: str
@@ -61,6 +99,31 @@ class ExtractTaskOut(BaseModel):
     nodes_count: int = 0
     relations_count: int = 0
     error_msg: Optional[str] = None
+
+
+class DocumentTaskOut(BaseModel):
+    task_id: str
+    document_id: int
+    extract_status: str
+    nodes_count: int = 0
+    relations_count: int = 0
+    error_msg: Optional[str] = None
+
+
+class ExtractionResultOut(BaseModel):
+    nodes: List[KGNodeOut]
+    relations: List[KGRelationOut]
+
+
+class QAFeedbackRequest(BaseModel):
+    helpful: bool
+    comment: Optional[str] = Field(None, max_length=1000)
+
+
+class QAFeedbackOut(BaseModel):
+    question_id: int
+    helpful: bool
+    comment: Optional[str] = None
 
 
 # ---------------- QA ----------------

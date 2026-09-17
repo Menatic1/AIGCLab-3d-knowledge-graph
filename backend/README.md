@@ -1,6 +1,6 @@
 # Backend Service
 
-The backend is a FastAPI service for document upload and parsing, knowledge extraction, graph management, learning-path calculation, progress tracking, and graph-grounded Q&A.
+The backend is a FastAPI service for authenticated course workspaces: document upload and parsing, course-scoped knowledge extraction, graph management, learning-path calculation, progress tracking, feedback, and graph-grounded Q&A. The original flat `/api/graph`, `/api/documents`, `/api/progress`, and `/api/qa` routes remain available for the demo compatibility flow.
 
 ```text
 backend/
@@ -29,6 +29,15 @@ uvicorn main:app --reload --port 8000
 ```
 
 Copy `.env.example` to `.env` before configuring an LLM provider. Never commit `.env` or uploaded course files.
+
+## Course and authentication flow
+
+1. Register or log in through `POST /api/auth/register` or `POST /api/auth/login`.
+2. Send the returned token as `Authorization: Bearer <token>`.
+3. Teachers create a course with `POST /api/courses`; students join with `POST /api/courses/{course_id}/join`.
+4. Use the course-scoped document, graph, QA, and learning-path routes. Course uploads namespace extracted node and relation ids by course so two courses cannot overwrite each other's graph.
+
+The complete request and response contract is maintained in [`docs/接口文档.md`](../docs/接口文档.md), and FastAPI exposes the same routes through `/docs` and `/redoc`.
 
 ## Adaptive Learning API
 
