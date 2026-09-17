@@ -1,11 +1,11 @@
 import { NavLink } from 'react-router-dom';
-import { Upload, Share2, MessageCircle, Route, Sparkles } from 'lucide-react';
+import { Upload, Share2, MessageCircle, Route, Sparkles, type LucideIcon } from 'lucide-react';
 import { useKnowledge } from '../../context/KnowledgeContext';
 
 interface MenuItem {
   to: string;
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+  icon: LucideIcon;
   desc: string;
 }
 

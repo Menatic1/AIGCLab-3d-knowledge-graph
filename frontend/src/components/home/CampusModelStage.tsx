@@ -2,13 +2,14 @@ import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import type { LucideIcon } from 'lucide-react';
 import type { TabKind } from '../../context/TabContext';
 
 type CampusCard = {
   kind: TabKind;
   title: string;
   desc: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>;
+  icon: LucideIcon;
 };
 
 type Props = {
