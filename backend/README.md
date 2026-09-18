@@ -37,6 +37,8 @@ Copy `.env.example` to `.env` before configuring an LLM provider. Never commit `
 3. Teachers create a course with `POST /api/courses`; students join with `POST /api/courses/{course_id}/join`.
 4. Use the course-scoped document, graph, QA, and learning-path routes. Course uploads namespace extracted node and relation ids by course so two courses cannot overwrite each other's graph.
 
+Course management endpoints include `GET /api/courses/{course_id}/overview` for dashboard totals, `GET /api/courses/{course_id}/members` for the teacher roster, and owner-only member role updates. Teachers can download original uploads and query extraction tasks. Course graph rows carry `confidence` and `review_status`; new extraction rows start at `pending_review`, manual edits become `confirmed` or `manually_edited`, and deletions are retained as `discarded` for audit and review filtering. `POST /api/auth/change-password` changes the current password, while `POST /api/auth/logout` confirms client-side token removal for the stateless token flow.
+
 The complete request and response contract is maintained in [`docs/接口文档.md`](../docs/接口文档.md), and FastAPI exposes the same routes through `/docs` and `/redoc`.
 
 ## Adaptive Learning API

@@ -67,6 +67,15 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
                 if "feedback_comment" not in cols:
                     conn.exec_driver_sql('ALTER TABLE "qa_records" ADD COLUMN "feedback_comment" VARCHAR(1000)')
                     conn.commit()
+            if table in {"kg_nodes", "kg_relations"}:
+                if "confidence" not in cols:
+                    conn.exec_driver_sql(f'ALTER TABLE "{table}" ADD COLUMN "confidence" FLOAT')
+                    conn.commit()
+                if "review_status" not in cols:
+                    conn.exec_driver_sql(
+                        f'ALTER TABLE "{table}" ADD COLUMN "review_status" VARCHAR(32) DEFAULT "confirmed" NOT NULL'
+                    )
+                    conn.commit()
 
     # 2) 首次启动（无任何节点）自动注入示例图谱，保证前端一点开就有数据
     db = SessionLocal()

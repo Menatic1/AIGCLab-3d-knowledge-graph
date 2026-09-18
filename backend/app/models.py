@@ -99,6 +99,8 @@ class KGNode(Base):
     category = Column(String(64), nullable=False, default="核心概念")
     description = Column(Text, nullable=True)
     difficulty = Column(Float, nullable=False, default=3.0)
+    confidence = Column(Float, nullable=True)
+    review_status = Column(String(32), nullable=False, default="confirmed")
     x = Column(Float, nullable=True)
     y = Column(Float, nullable=True)
     document_id = Column(Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
@@ -120,6 +122,8 @@ class KGRelation(Base):
     target = Column(String(64), ForeignKey("kg_nodes.id", ondelete="CASCADE"), nullable=False, index=True)
     type = Column(String(64), nullable=False, default="关联")
     label = Column(String(128), nullable=True)
+    confidence = Column(Float, nullable=True)
+    review_status = Column(String(32), nullable=False, default="confirmed")
     document_id = Column(Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

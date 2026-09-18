@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from .. import schemas
 from ..auth import create_token, get_current_user, hash_password, verify_password
 from ..auth import get_db
 from ..models import User
@@ -48,7 +49,11 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     """登录，返回 JWT token。"""
     user = db.query(User).filter(User.username == payload.username).first()
-    if not user or not verify_password(payload.password, user.hashed_password, user.salt):
+    try:
+        valid_password = bool(user and verify_password(payload.password, user.hashed_password, user.salt))
+    except (TypeError, ValueError):
+        valid_password = False
+    if not valid_password:
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     token = create_token(user.id, user.username)
     return {
@@ -61,3 +66,29 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 def me(user: User = Depends(get_current_user)):
     """获取当前登录用户信息。"""
     return {"id": user.id, "username": user.username, "role": user.role}
+
+
+@router.post("/change-password")
+def change_password(
+    payload: schemas.PasswordChangeRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """修改当前用户密码；修改后旧 token 仍可用到期，客户端应重新登录。"""
+    try:
+        valid_password = verify_password(payload.current_password, user.hashed_password, user.salt)
+    except (TypeError, ValueError):
+        valid_password = False
+    if not valid_password:
+        raise HTTPException(status_code=400, detail="当前密码不正确")
+    hashed, salt = hash_password(payload.new_password)
+    user.hashed_password = hashed
+    user.salt = salt
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/logout")
+def logout(_: User = Depends(get_current_user)):
+    """无状态 token 无需服务端存储；客户端删除 token 即完成登出。"""
+    return {"ok": True}

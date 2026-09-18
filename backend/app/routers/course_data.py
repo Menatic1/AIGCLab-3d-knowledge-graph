@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
+from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -20,10 +22,20 @@ course_router = APIRouter(prefix="/api/courses/{course_id}", tags=["course-data"
 task_router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 
-def _graph(db: Session, course_id: int, category: str | None = None, q: str | None = None):
+def _graph(
+    db: Session,
+    course_id: int,
+    category: str | None = None,
+    q: str | None = None,
+    review_status: str | None = None,
+):
     query = db.query(models.KGNode).filter(models.KGNode.course_id == course_id)
     if category:
         query = query.filter(models.KGNode.category == category)
+    query = query.filter(
+        models.KGNode.review_status == review_status
+        if review_status else models.KGNode.review_status != "discarded"
+    )
     if q:
         pattern = f"%{q}%"
         query = query.filter(or_(models.KGNode.name.ilike(pattern), models.KGNode.description.ilike(pattern)))
@@ -33,6 +45,10 @@ def _graph(db: Session, course_id: int, category: str | None = None, q: str | No
         db.query(models.KGRelation)
         .filter(models.KGRelation.course_id == course_id)
         .filter(models.KGRelation.source.in_(node_ids), models.KGRelation.target.in_(node_ids))
+        .filter(
+            models.KGRelation.review_status == review_status
+            if review_status else models.KGRelation.review_status != "discarded"
+        )
         .all()
         if node_ids else []
     )
@@ -47,11 +63,12 @@ def get_course_graph(
     course_id: int,
     category: str | None = Query(None),
     q: str | None = Query(None),
+    review_status: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User | None = Depends(get_current_user_optional),
 ):
     require_course_access(db, course_id, current_user)
-    return _graph(db, course_id, category, q)
+    return _graph(db, course_id, category, q, review_status)
 
 
 @course_router.get("/nodes/{node_id}", response_model=schemas.KGNodeOut)
@@ -62,7 +79,11 @@ def get_course_node(
     current_user: models.User | None = Depends(get_current_user_optional),
 ):
     require_course_access(db, course_id, current_user)
-    node = db.query(models.KGNode).filter(models.KGNode.course_id == course_id, models.KGNode.id == node_id).first()
+    node = db.query(models.KGNode).filter(
+        models.KGNode.course_id == course_id,
+        models.KGNode.id == node_id,
+        models.KGNode.review_status != "discarded",
+    ).first()
     if not node:
         raise HTTPException(status_code=404, detail="节点不存在")
     return node
@@ -84,6 +105,8 @@ def create_course_node(
     node.category = payload.category
     node.description = payload.description
     node.difficulty = payload.difficulty
+    node.confidence = payload.confidence
+    node.review_status = "confirmed"
     node.x = payload.x
     node.y = payload.y
     db.add(node)
@@ -101,13 +124,19 @@ def update_course_node(
     current_user: models.User | None = Depends(get_current_user_optional),
 ):
     ctx = require_course_access(db, course_id, current_user, "teacher")
-    node = db.query(models.KGNode).filter(models.KGNode.course_id == course_id, models.KGNode.id == node_id).first()
+    node = db.query(models.KGNode).filter(
+        models.KGNode.course_id == course_id,
+        models.KGNode.id == node_id,
+        models.KGNode.review_status != "discarded",
+    ).first()
     if not node:
         raise HTTPException(status_code=404, detail="节点不存在")
     node.name = payload.name
     node.category = payload.category
     node.description = payload.description
     node.difficulty = payload.difficulty
+    node.confidence = payload.confidence
+    node.review_status = payload.review_status
     node.x = payload.x
     node.y = payload.y
     node.user_id = ctx.user_id
@@ -130,8 +159,8 @@ def delete_course_node(
     db.query(models.KGRelation).filter(
         models.KGRelation.course_id == course_id,
         or_(models.KGRelation.source == node_id, models.KGRelation.target == node_id),
-    ).delete(synchronize_session=False)
-    db.delete(node)
+    ).update({models.KGRelation.review_status: "discarded"}, synchronize_session=False)
+    node.review_status = "discarded"
     db.commit()
     return {"ok": True}
 
@@ -145,7 +174,11 @@ def create_course_relation(
 ):
     ctx = require_course_access(db, course_id, current_user, "teacher")
     for node_id in (payload.source, payload.target):
-        if not db.query(models.KGNode).filter(models.KGNode.course_id == course_id, models.KGNode.id == node_id).first():
+        if not db.query(models.KGNode).filter(
+            models.KGNode.course_id == course_id,
+            models.KGNode.id == node_id,
+            models.KGNode.review_status != "discarded",
+        ).first():
             raise HTTPException(status_code=400, detail=f"节点 {node_id} 不存在")
     row = db.query(models.KGRelation).filter(models.KGRelation.id == payload.id).first()
     if row and row.course_id != course_id:
@@ -155,6 +188,8 @@ def create_course_relation(
     row.target = payload.target
     row.type = payload.type
     row.label = payload.label
+    row.confidence = payload.confidence
+    row.review_status = "confirmed"
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -172,7 +207,7 @@ def delete_course_relation(
     row = db.query(models.KGRelation).filter(models.KGRelation.course_id == course_id, models.KGRelation.id == relation_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="关系不存在")
-    db.delete(row)
+    row.review_status = "discarded"
     db.commit()
     return {"ok": True}
 
@@ -189,8 +224,11 @@ def export_course_graph(
     if format == "json":
         return graph
     lines = [f'<graphml xmlns="http://graphml.graphdrawing.org/xmlns"><graph id="course-{course_id}" edgedefault="directed">']
-    lines.extend(f'<node id="{n.id}" />' for n in graph.nodes)
-    lines.extend(f'<edge id="{r.id}" source="{r.source}" target="{r.target}" />' for r in graph.relations)
+    lines.extend(f'<node id="{xml_escape(n.id)}" />' for n in graph.nodes)
+    lines.extend(
+        f'<edge id="{xml_escape(r.id)}" source="{xml_escape(r.source)}" target="{xml_escape(r.target)}" />'
+        for r in graph.relations
+    )
     lines.append("</graph></graphml>")
     return PlainTextResponse("".join(lines), media_type="application/graphml+xml")
 
@@ -203,6 +241,30 @@ def list_course_documents(
 ):
     require_course_access(db, course_id, current_user)
     return db.query(models.Document).filter(models.Document.course_id == course_id).order_by(models.Document.created_at.desc()).all()
+
+
+@course_router.get("/documents/{document_id}/download")
+def download_course_document(
+    course_id: int,
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User | None = Depends(get_current_user_optional),
+):
+    require_course_access(db, course_id, current_user)
+    document = db.query(models.Document).filter(
+        models.Document.id == document_id,
+        models.Document.course_id == course_id,
+    ).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="文档不存在")
+    path = Path(document.stored_path)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="原始文件不存在")
+    return FileResponse(
+        path,
+        filename=document.filename,
+        media_type=document.content_type or "application/octet-stream",
+    )
 
 
 @course_router.post("/documents/upload", response_model=schemas.DocumentTaskOut)
@@ -233,6 +295,8 @@ async def upload_course_document(
         nodes_count=result.nodes_count,
         relations_count=result.relations_count,
         error_msg=result.error_msg,
+        created_at=task.created_at,
+        updated_at=task.updated_at,
     )
 
 
@@ -260,24 +324,51 @@ async def _reextract_course_document(db: Session, document: models.Document, *, 
              "target": source_ids.get(relation["target"], f"{prefix}{relation['target']}" )}
             for relation in result.relations
         ]
-        db.query(models.KGRelation).filter(models.KGRelation.document_id == document.id).delete(synchronize_session=False)
-        db.query(models.KGNode).filter(models.KGNode.document_id == document.id).delete(synchronize_session=False)
-        node_ids: set[str] = set()
+        node_ids = {node["id"] for node in nodes}
+        relation_ids = {relation["id"] for relation in relations}
+        db.query(models.KGNode).filter(
+            models.KGNode.document_id == document.id,
+            models.KGNode.id.notin_(node_ids),
+        ).update({models.KGNode.review_status: "discarded"}, synchronize_session=False)
+        db.query(models.KGRelation).filter(
+            models.KGRelation.document_id == document.id,
+            models.KGRelation.id.notin_(relation_ids),
+        ).update({models.KGRelation.review_status: "discarded"}, synchronize_session=False)
         for node in nodes:
-            db.add(models.KGNode(
-                id=node["id"], name=node["name"], category=node["category"],
-                description=node.get("description"), difficulty=float(node.get("difficulty") or 3.0),
-                document_id=document.id, course_id=course_id, user_id=user_id,
-            ))
-            node_ids.add(node["id"])
+            row = db.query(models.KGNode).filter(
+                models.KGNode.id == node["id"],
+                models.KGNode.course_id == course_id,
+            ).first()
+            if row is None:
+                row = models.KGNode(id=node["id"], course_id=course_id, user_id=user_id)
+            row.name = node["name"]
+            row.category = node["category"]
+            row.description = node.get("description")
+            row.difficulty = float(node.get("difficulty") or 3.0)
+            row.confidence = node.get("confidence")
+            row.review_status = "pending_review"
+            row.document_id = document.id
+            row.user_id = user_id
+            db.add(row)
         db.flush()
         for relation in relations:
             if relation["source"] in node_ids and relation["target"] in node_ids:
-                db.add(models.KGRelation(
-                    id=relation["id"], source=relation["source"], target=relation["target"],
-                    type=relation["type"], label=relation.get("label"), document_id=document.id,
-                    course_id=course_id, user_id=user_id,
-                ))
+                row = db.query(models.KGRelation).filter(
+                    models.KGRelation.id == relation["id"],
+                    models.KGRelation.course_id == course_id,
+                ).first()
+                if row is None:
+                    row = models.KGRelation(id=relation["id"], course_id=course_id, user_id=user_id)
+                row.source = relation["source"]
+                row.target = relation["target"]
+                row.type = relation["type"]
+                row.label = relation.get("label")
+                row.confidence = relation.get("confidence")
+                row.review_status = "pending_review"
+                row.document_id = document.id
+                row.user_id = user_id
+                db.add(row)
+        document.error_msg = None
         document.extract_status = "done"
         db.commit()
         return len(nodes), len(relations), None
@@ -314,6 +405,7 @@ async def parse_course_document(
     return schemas.DocumentTaskOut(
         task_id=task.id, document_id=document.id, extract_status=task.status,
         nodes_count=nodes_count, relations_count=relations_count, error_msg=error,
+        created_at=task.created_at, updated_at=task.updated_at,
     )
 
 
@@ -347,6 +439,7 @@ async def trigger_course_extraction(
     return [schemas.DocumentTaskOut(
         task_id=task.id, document_id=task.document_id, extract_status=task.status,
         nodes_count=nodes_count, relations_count=relations_count, error_msg=error,
+        created_at=task.created_at, updated_at=task.updated_at,
     ) for task, nodes_count, relations_count, error in tasks]
 
 
@@ -367,6 +460,8 @@ def get_extraction_task(
         nodes_count=task.nodes_count,
         relations_count=task.relations_count,
         error_msg=task.error_msg,
+        created_at=task.created_at,
+        updated_at=task.updated_at,
     )
 
 
@@ -385,6 +480,10 @@ def delete_course_document(
         db.delete(node)
     for relation in db.query(models.KGRelation).filter(models.KGRelation.document_id == document_id).all():
         db.delete(relation)
+    try:
+        Path(document.stored_path).unlink(missing_ok=True)
+    except OSError:
+        pass
     db.delete(document)
     db.commit()
     return {"ok": True}
@@ -393,9 +492,24 @@ def delete_course_document(
 @course_router.get("/extraction/result", response_model=schemas.ExtractionResultOut)
 def extraction_result(
     course_id: int,
+    review_status: str | None = Query(None),
+    document_id: int | None = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User | None = Depends(get_current_user_optional),
 ):
     require_course_access(db, course_id, current_user, "teacher")
-    graph = _graph(db, course_id)
+    if review_status and review_status not in {"pending_review", "confirmed", "manually_edited", "discarded"}:
+        raise HTTPException(status_code=400, detail="审核状态无效")
+    graph = _graph(db, course_id, review_status=review_status)
+    if document_id is not None:
+        node_ids = {
+            node.id for node in db.query(models.KGNode).filter(
+                models.KGNode.course_id == course_id,
+                models.KGNode.document_id == document_id,
+            ).all()
+        }
+        graph = schemas.KnowledgeGraphOut(
+            nodes=[node for node in graph.nodes if node.id in node_ids],
+            relations=[relation for relation in graph.relations if relation.source in node_ids and relation.target in node_ids],
+        )
     return schemas.ExtractionResultOut(nodes=graph.nodes, relations=graph.relations)

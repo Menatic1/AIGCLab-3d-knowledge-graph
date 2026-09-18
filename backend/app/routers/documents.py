@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -19,6 +20,17 @@ router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 def _ensure_upload_dir():
     Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+
+
+def _safe_upload_filename(raw_name: str | None) -> str:
+    """Return a portable basename safe on Windows and POSIX filesystems."""
+    filename = Path(raw_name or "").name
+    filename = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", filename)
+    filename = filename.strip(" .") or "upload"
+    stem = Path(filename).stem.upper()
+    if stem in {"CON", "PRN", "AUX", "NUL"} or re.fullmatch(r"COM[1-9]|LPT[1-9]", stem):
+        filename = f"_{filename}"
+    return filename[:255]
 
 
 @router.get("", response_model=list[schemas.DocumentOut])
@@ -39,7 +51,7 @@ async def _upload_document_impl(
     解析失败返回 status=error，抽取依然会用离线 fallback 以保证不中断流程。
     """
     _ensure_upload_dir()
-    filename = file.filename or f"upload_{uuid.uuid4().hex[:8]}"
+    filename = _safe_upload_filename(file.filename or f"upload_{uuid.uuid4().hex[:8]}")
     safe_name = f"{uuid.uuid4().hex[:12]}_{filename}"
     stored_path = os.path.join(settings.UPLOAD_DIR, safe_name)
 
@@ -118,6 +130,9 @@ async def _upload_document_impl(
             existing.category = n["category"]
             existing.description = n["description"]
             existing.difficulty = float(n.get("difficulty") or existing.difficulty)
+            existing.confidence = n.get("confidence")
+            if course_id is not None:
+                existing.review_status = "pending_review"
             existing.document_id = doc.id
             existing.course_id = course_id
             existing.user_id = user_id
@@ -129,6 +144,8 @@ async def _upload_document_impl(
                 category=n["category"],
                 description=n["description"],
                 difficulty=float(n.get("difficulty") or 3.0),
+                confidence=n.get("confidence"),
+                review_status="pending_review" if course_id is not None else "confirmed",
                 document_id=doc.id,
                 course_id=course_id,
                 user_id=user_id,
@@ -137,7 +154,6 @@ async def _upload_document_impl(
             node_map[obj.id] = obj
     db.flush()
 
-    inserted_rel = 0
     for r in relations:
         if r["source"] not in node_map or r["target"] not in node_map:
             continue
@@ -145,6 +161,9 @@ async def _upload_document_impl(
         if existing:
             existing.type = r["type"]
             existing.label = r["label"]
+            existing.confidence = r.get("confidence")
+            if course_id is not None:
+                existing.review_status = "pending_review"
             existing.document_id = doc.id
             existing.course_id = course_id
             existing.user_id = user_id
@@ -155,12 +174,13 @@ async def _upload_document_impl(
                 target=r["target"],
                 type=r["type"],
                 label=r["label"],
+                confidence=r.get("confidence"),
+                review_status="pending_review" if course_id is not None else "confirmed",
                 document_id=doc.id,
                 course_id=course_id,
                 user_id=user_id,
             )
             db.add(rel)
-            inserted_rel += 1
     db.commit()
 
     doc.extract_status = "done"
@@ -201,6 +221,10 @@ def delete_document(doc_id: int, db: Session = Depends(get_db)):
         db.delete(n)
     for r in db.query(models.KGRelation).filter(models.KGRelation.document_id == doc_id).all():
         db.delete(r)
+    try:
+        Path(doc.stored_path).unlink(missing_ok=True)
+    except OSError:
+        pass
     db.delete(doc)
     db.commit()
     return {"ok": True}

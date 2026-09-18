@@ -27,6 +27,13 @@ def test_course_backend_contract_is_mounted():
         ("POST", "/api/courses/{course_id}/learning-path/progress"),
         ("POST", "/api/courses/{course_id}/learning-path/recommend"),
         ("GET", "/api/courses/{course_id}/learning-path/visualize"),
+        ("GET", "/api/courses/{course_id}/overview"),
+        ("GET", "/api/courses/{course_id}/members"),
+        ("PUT", "/api/courses/{course_id}/members/{user_id}"),
+        ("DELETE", "/api/courses/{course_id}/members/{user_id}"),
+        ("GET", "/api/courses/{course_id}/documents/{document_id}/download"),
+        ("POST", "/api/auth/change-password"),
+        ("POST", "/api/auth/logout"),
     }
     assert expected <= paths
 

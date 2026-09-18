@@ -34,6 +34,17 @@ class CourseJoinOut(BaseModel):
     already_member: bool
 
 
+class CourseMemberOut(BaseModel):
+    user_id: str
+    username: Optional[str] = None
+    role: Literal["owner", "teacher", "student"]
+    joined_at: datetime
+
+
+class CourseMemberRoleUpdate(BaseModel):
+    role: Literal["teacher", "student"]
+
+
 class UserProfileOut(BaseModel):
     id: str
     username: str
@@ -51,6 +62,8 @@ class KGNodeOut(BaseModel):
     category: str = "核心概念"
     description: Optional[str] = None
     difficulty: float = 3.0
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    review_status: Literal["pending_review", "confirmed", "manually_edited", "discarded"] = "confirmed"
     x: Optional[float] = None
     y: Optional[float] = None
 
@@ -64,6 +77,8 @@ class KGRelationOut(BaseModel):
     target: str
     type: str
     label: Optional[str] = None
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+    review_status: Literal["pending_review", "confirmed", "manually_edited", "discarded"] = "confirmed"
 
     class Config:
         from_attributes = True
@@ -108,6 +123,22 @@ class DocumentTaskOut(BaseModel):
     nodes_count: int = 0
     relations_count: int = 0
     error_msg: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class CourseOverviewOut(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    member_count: int
+    student_count: int
+    node_count: int
+    relation_count: int
+    document_count: int
+    qa_count: int
+    mastery_rate: float
+    recent_tasks: List[DocumentTaskOut] = Field(default_factory=list)
 
 
 class ExtractionResultOut(BaseModel):
@@ -124,6 +155,11 @@ class QAFeedbackOut(BaseModel):
     question_id: int
     helpful: bool
     comment: Optional[str] = None
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., min_length=1, max_length=64)
+    new_password: str = Field(..., min_length=6, max_length=64)
 
 
 # ---------------- QA ----------------

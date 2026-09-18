@@ -16,11 +16,17 @@ router = APIRouter(tags=["course-learning"])
 
 
 def _course_nodes(db: Session, course_id: int):
-    return db.query(models.KGNode).filter(models.KGNode.course_id == course_id).all()
+    return db.query(models.KGNode).filter(
+        models.KGNode.course_id == course_id,
+        models.KGNode.review_status != "discarded",
+    ).all()
 
 
 def _course_relations(db: Session, course_id: int):
-    return db.query(models.KGRelation).filter(models.KGRelation.course_id == course_id).all()
+    return db.query(models.KGRelation).filter(
+        models.KGRelation.course_id == course_id,
+        models.KGRelation.review_status != "discarded",
+    ).all()
 
 
 @router.post("/api/courses/{course_id}/qa/ask", response_model=schemas.QAAnswer)
