@@ -217,10 +217,10 @@ def delete_document(doc_id: int, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(404, "文档不存在")
     # 只删除本文档贡献的节点/关系（其他文档抽取的保留）
-    for n in db.query(models.KGNode).filter(models.KGNode.document_id == doc_id).all():
-        db.delete(n)
     for r in db.query(models.KGRelation).filter(models.KGRelation.document_id == doc_id).all():
         db.delete(r)
+    for n in db.query(models.KGNode).filter(models.KGNode.document_id == doc_id).all():
+        db.delete(n)
     try:
         Path(doc.stored_path).unlink(missing_ok=True)
     except OSError:

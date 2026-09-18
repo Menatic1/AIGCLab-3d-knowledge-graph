@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from main import app
 from app.models import Course, CourseMember
 from app.permissions import require_course_access
+from app.routers.documents import _safe_upload_filename
 
 
 def test_course_endpoints_are_mounted():
@@ -69,3 +70,8 @@ def test_course_owner_gets_owner_role():
     course = SimpleNamespace(id=7, owner_id="teacher-1")
     ctx = require_course_access(_Db(course), 7, SimpleNamespace(id="teacher-1"), "teacher")
     assert ctx.role == "owner"
+
+
+def test_upload_filename_is_safe_on_windows():
+    assert _safe_upload_filename("../../<course>:CON?.txt") == "_course__CON_.txt"
+    assert _safe_upload_filename("  .  ") == "upload"

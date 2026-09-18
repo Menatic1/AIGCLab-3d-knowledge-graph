@@ -476,10 +476,10 @@ def delete_course_document(
     document = db.query(models.Document).filter(models.Document.id == document_id, models.Document.course_id == course_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="文档不存在")
-    for node in db.query(models.KGNode).filter(models.KGNode.document_id == document_id).all():
-        db.delete(node)
     for relation in db.query(models.KGRelation).filter(models.KGRelation.document_id == document_id).all():
         db.delete(relation)
+    for node in db.query(models.KGNode).filter(models.KGNode.document_id == document_id).all():
+        db.delete(node)
     try:
         Path(document.stored_path).unlink(missing_ok=True)
     except OSError:
