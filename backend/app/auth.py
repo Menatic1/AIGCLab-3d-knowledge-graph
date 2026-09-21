@@ -108,10 +108,15 @@ def get_current_user_optional(
     db: Session = Depends(get_db),
 ) -> User | None:
     """可选认证：有 token 就验证，没有就返回 None（用于公开接口）。"""
-    if not authorization.startswith("Bearer "):
+    if not authorization:
         return None
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="未提供认证 Token")
     token = authorization[7:]
     payload = decode_token(token)
     if not payload:
-        return None
-    return db.query(User).filter(User.id == payload["user_id"]).first()
+        raise HTTPException(status_code=401, detail="Token 无效或已过期")
+    user = db.query(User).filter(User.id == payload["user_id"]).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="用户不存在")
+    return user

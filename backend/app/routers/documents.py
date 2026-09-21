@@ -27,11 +27,13 @@ def list_documents(db: Session = Depends(get_db)):
     return docs
 
 
-@router.post("/upload", response_model=schemas.ExtractTaskOut)
-async def upload_document(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-):
+async def _upload_document_impl(
+    file: UploadFile,
+    db: Session,
+    *,
+    course_id: int | None = None,
+    user_id: str = "default",
+) -> schemas.ExtractTaskOut:
     """上传并直接解析 + 抽取知识图谱（同步返回结果）。
 
     解析失败返回 status=error，抽取依然会用离线 fallback 以保证不中断流程。
@@ -50,6 +52,8 @@ async def upload_document(
 
     size_bytes = len(content)
     doc = models.Document(
+        user_id=user_id,
+        course_id=course_id,
         filename=filename,
         stored_path=stored_path,
         content_type=file.content_type,
@@ -87,9 +91,27 @@ async def upload_document(
             document_id=doc.id, extract_status=doc.extract_status, error_msg=doc.error_msg,
         )
 
+    # Course scoped graphs use globally unique ids so records from two courses
+    # can never overwrite one another in the legacy single-column schema.
+    id_prefix = f"c{course_id}_" if course_id is not None else ""
+    nodes = [
+        {**node, "id": f"{id_prefix}{node['id']}"}
+        for node in result.nodes
+    ]
+    source_ids = {node["id"]: f"{id_prefix}{node['id']}" for node in result.nodes}
+    relations = [
+        {
+            **relation,
+            "id": f"{id_prefix}{relation['id']}",
+            "source": source_ids.get(relation["source"], f"{id_prefix}{relation['source']}"),
+            "target": source_ids.get(relation["target"], f"{id_prefix}{relation['target']}"),
+        }
+        for relation in result.relations
+    ]
+
     # 3) 写入数据库（按 id upsert：先查存在就合并，否则插入）
     node_map: dict[str, models.KGNode] = {}
-    for n in result.nodes:
+    for n in nodes:
         existing = db.query(models.KGNode).filter(models.KGNode.id == n["id"]).first()
         if existing:
             existing.name = n["name"]
@@ -97,6 +119,8 @@ async def upload_document(
             existing.description = n["description"]
             existing.difficulty = float(n.get("difficulty") or existing.difficulty)
             existing.document_id = doc.id
+            existing.course_id = course_id
+            existing.user_id = user_id
             node_map[existing.id] = existing
         else:
             obj = models.KGNode(
@@ -106,13 +130,15 @@ async def upload_document(
                 description=n["description"],
                 difficulty=float(n.get("difficulty") or 3.0),
                 document_id=doc.id,
+                course_id=course_id,
+                user_id=user_id,
             )
             db.add(obj)
             node_map[obj.id] = obj
     db.flush()
 
     inserted_rel = 0
-    for r in result.relations:
+    for r in relations:
         if r["source"] not in node_map or r["target"] not in node_map:
             continue
         existing = db.query(models.KGRelation).filter(models.KGRelation.id == r["id"]).first()
@@ -120,6 +146,8 @@ async def upload_document(
             existing.type = r["type"]
             existing.label = r["label"]
             existing.document_id = doc.id
+            existing.course_id = course_id
+            existing.user_id = user_id
         else:
             rel = models.KGRelation(
                 id=r["id"],
@@ -128,6 +156,8 @@ async def upload_document(
                 type=r["type"],
                 label=r["label"],
                 document_id=doc.id,
+                course_id=course_id,
+                user_id=user_id,
             )
             db.add(rel)
             inserted_rel += 1
@@ -140,9 +170,17 @@ async def upload_document(
     return schemas.ExtractTaskOut(
         document_id=doc.id,
         extract_status=doc.extract_status,
-        nodes_count=len(result.nodes),
-        relations_count=len(result.relations),
+        nodes_count=len(nodes),
+        relations_count=len(relations),
     )
+
+
+@router.post("/upload", response_model=schemas.ExtractTaskOut)
+async def upload_document(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    return await _upload_document_impl(file, db)
 
 
 @router.get("/{doc_id}", response_model=schemas.DocumentOut)
