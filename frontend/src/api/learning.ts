@@ -31,9 +31,12 @@ function authHeaders() {
 /** 后端未启动时返回 null，调用方继续使用前端演示数据。 */
 async function request<T>(path: string, options: RequestInit): Promise<T | null> {
   try {
+    const headers = new Headers(options.headers);
+    headers.set('Content-Type', 'application/json');
+    Object.entries(authHeaders()).forEach(([key, value]) => headers.set(key, value));
     const response = await fetch(`${API_BASE}${path}`, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(options.headers ?? {}) },
+      headers,
     });
     return response.ok ? await response.json() as T : null;
   } catch {

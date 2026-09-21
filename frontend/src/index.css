@@ -29,11 +29,11 @@
 }
 
 @layer components {
-  /* 知识图谱：复古科幻展馆式舞台装饰，所有装饰层不拦截 3D 操作 */
+  /* 知识图谱：浅色梦境展台，避免遮挡可交互的 3D 画面。 */
   .knowledge-graph-stage {
     isolation: isolate;
-    border: 1px solid rgba(63, 123, 160, 0.28);
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.58), inset 0 0 34px rgba(63, 123, 160, 0.08);
+    border: 1px solid rgba(154, 137, 188, 0.26);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7), inset 0 0 42px rgba(160, 181, 217, 0.12);
   }
   .knowledge-graph-stage::before,
   .knowledge-graph-stage::after {
@@ -44,19 +44,10 @@
     pointer-events: none;
   }
   .knowledge-graph-stage::before {
-    opacity: 0.48;
-    background-image:
-      linear-gradient(rgba(63, 123, 160, 0.12) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(63, 123, 160, 0.12) 1px, transparent 1px),
-      linear-gradient(rgba(63, 123, 160, 0.055) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(63, 123, 160, 0.055) 1px, transparent 1px);
-    background-size: 56px 56px, 56px 56px, 14px 14px, 14px 14px;
-    mask-image: radial-gradient(circle at 50% 48%, black 0%, rgba(0, 0, 0, 0.72) 48%, transparent 88%);
+    display: none;
   }
   .knowledge-graph-stage::after {
-    background:
-      linear-gradient(90deg, transparent 0 8%, rgba(168, 62, 51, 0.23) 8% 8.15%, transparent 8.15% 91.85%, rgba(208, 139, 49, 0.28) 91.85% 92%, transparent 92%),
-      linear-gradient(0deg, transparent 0 9%, rgba(63, 123, 160, 0.22) 9% 9.2%, transparent 9.2% 90.8%, rgba(63, 123, 160, 0.22) 90.8% 91%, transparent 91%);
+    display: none;
   }
   .graph-orbit {
     position: absolute;
