@@ -1,0 +1,58 @@
+graph TB
+    subgraph 客户端
+        Client["💻 前端浏览器<br/>React + Vite"]
+    end
+    
+    subgraph FastAPI 服务端
+        subgraph 路由层 routers
+            direction LR
+            R1[auth 认证]
+            R2[users 用户]
+            R3[courses 课程]
+            R4[documents 文档]
+            R5[graph 图谱]
+            R6[qa 问答]
+            R7[tutor 导学]
+        end
+        
+        subgraph 权限与认证
+            direction LR
+            A1[JWT 令牌校验]
+            A2[RBAC 角色权限<br/>require_role / require_teacher / require_student]
+        end
+        
+        subgraph 业务层 services
+            direction LR
+            B1[文档解析器<br/>PDF/Word/PPT]
+            B2[jieba 分词]
+            B3[图谱构建器<br/>层级/布局]
+            B4[LLM 客户端<br/>知识抽取/RAG]
+        end
+        
+        subgraph 数据层 models
+            direction LR
+            D1[Pydantic 校验]
+            D2[SQLAlchemy ORM]
+        end
+    end
+    
+    subgraph 外部依赖
+        direction LR
+        DB[("🗄️ SQLite 数据库")]
+        AI["🤖 大语言模型 LLM API"]
+    end
+    
+    Client -->|HTTP + JWT| 路由层
+    路由层 --> 权限与认证
+    权限与认证 --> 业务层
+    业务层 --> 数据层
+    数据层 --> DB
+    业务层 --> AI
+    
+    style Client fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style R1 fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+    style A2 fill:#fef3c7,stroke:#d97706,stroke-width:2px
+    style B4 fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style D2 fill:#fce7f3,stroke:#db2777,stroke-width:2px
+    style DB fill:#e0f2fe,stroke:#0284c7,stroke-width:2px
+    style AI fill:#fff1f2,stroke:#e11d48,stroke-width:2px

@@ -10,7 +10,9 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    // Keep this app separate from the other project that owns port 5173.
+    port: 5174,
+    strictPort: true,
     host: true,
   },
 })

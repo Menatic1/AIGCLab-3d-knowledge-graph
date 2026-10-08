@@ -1,22 +1,27 @@
 import { useTabs } from '../context/TabContext';
-import { useEffect, useState } from 'react';
-import { Route, CheckCircle2, Zap, ArrowRight } from 'lucide-react';
+import { CheckCircle2, Zap, ArrowRight } from 'lucide-react';
 import KnowledgeChecklist from '../components/learning-path/KnowledgeChecklist';
 import PathRecommendation from '../components/learning-path/PathRecommendation';
 import PathVisualization from '../components/learning-path/PathVisualization';
 import { useKnowledge } from '../context/KnowledgeContext';
 
 export default function LearningPathPage() {
-  const { hasGraph, graph, masteredIds, recommendations } = useKnowledge();
+  const { hasGraph, graph, masteredIds, recommendations, setLearningNode } = useKnowledge();
   const { openTab } = useTabs();
-  const [, forceUpdate] = useState(0);
 
   const handleFocusNode = (id: string) => {
-    openTab('graph');
-    console.log('[PathPage] focus node', id);
+    const node = graph?.nodes.find((item) => item.id === id);
+    if (!node) return;
+    setLearningNode(node);
+    openTab('learning');
   };
 
-  useEffect(() => {}, [masteredIds.size]);
+  const handleStartQuiz = (id: string) => {
+    const node = graph?.nodes.find((item) => item.id === id);
+    if (!node) return;
+    setLearningNode(node);
+    openTab('quiz');
+  };
 
   if (!hasGraph || !graph) {
     return (
@@ -42,7 +47,7 @@ export default function LearningPathPage() {
   const progress = graph.nodes.length > 0 ? Math.round((masteredIds.size / graph.nodes.length) * 100) : 0;
 
   return (
-    <div className="flex flex-col gap-4 min-h-[calc(100vh-140px)]">
+    <div className="flex flex-col gap-4 min-h-full pb-6">
       {/* 顶部：标题 + 统计 + 进度条 */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -87,19 +92,19 @@ export default function LearningPathPage() {
         </div>
       </div>
 
-      {/* 三栏主布局 */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[calc(100vh-320px)] min-h-[560px]">
-        <div className="lg:col-span-4 min-h-0">
-          <KnowledgeChecklist />
+      {/* 上方两个工作框，页面整体负责纵向滚动 */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-stretch">
+        <div className="h-[620px] min-h-0">
+          <KnowledgeChecklist autoFocus={handleFocusNode} />
         </div>
-        <div className="lg:col-span-8 flex flex-col gap-4 min-h-0">
-          <div className="flex-1 min-h-[48%]">
-            <PathRecommendation onFocusNode={handleFocusNode} />
-          </div>
-          <div className="flex-1 min-h-[48%]">
-            <PathVisualization onFocusNode={handleFocusNode} />
-          </div>
+        <div className="h-[620px] min-h-0">
+          <PathRecommendation onFocusNode={handleFocusNode} onStartQuiz={handleStartQuiz} />
         </div>
+      </div>
+
+      {/* 下方全宽可视化框，内容完整展开 */}
+      <div>
+        <PathVisualization onFocusNode={handleFocusNode} />
       </div>
     </div>
   );

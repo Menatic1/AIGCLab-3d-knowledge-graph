@@ -1,0 +1,56 @@
+{
+  "efficiency": {
+    "登录": 36.6,
+    "课程列表加载": 6.5,
+    "课程概览加载": 3.9,
+    "知识图谱加载": 7.4,
+    "智能问答首响": 224.8,
+    "学习路径推荐": 10.6
+  },
+  "extraction": {
+    "node_precision": 88.9,
+    "node_recall": 18.2,
+    "node_f1": 30.2,
+    "aigc_nodes": 36,
+    "aigc_relations": 55,
+    "aigc_gen_seconds": 44.1
+  },
+  "permissions": [
+    {
+      "test": "教师访问学生接口(学习路径推荐)",
+      "status": 200,
+      "passed": false
+    },
+    {
+      "test": "教师访问学生接口(智能问答)",
+      "status": 200,
+      "passed": false
+    },
+    {
+      "test": "学生访问教师接口(删除课程)",
+      "status": 403,
+      "passed": true
+    },
+    {
+      "test": "学生访问教师接口(文档上传)",
+      "status": 422,
+      "passed": false
+    },
+    {
+      "test": "未登录访问受保护接口(课程列表)",
+      "status": 200,
+      "passed": false
+    },
+    {
+      "test": "未登录访问公开接口(健康检查)",
+      "status": 200,
+      "passed": true
+    }
+  ],
+  "permission_pass_rate": 33.3,
+  "comparison": {
+    "manual_minutes": 226,
+    "system_minutes": 15.7,
+    "speedup": 14.4
+  }
+}

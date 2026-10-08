@@ -1,0 +1,203 @@
+{
+  "overlap": 0.4,
+  "lead": 1,
+  "scenes": [
+    {
+      "key": "s0",
+      "name": "片头",
+      "start": 0,
+      "dur": 8,
+      "narrationDur": 8,
+      "gap": 2,
+      "narrationOffset": 0,
+      "audio": null,
+      "beats": [
+        {
+          "subtitle": "智绘千里 · AIGC 知识图谱智能导学系统",
+          "start": 0,
+          "end": 8
+        }
+      ]
+    },
+    {
+      "key": "s1",
+      "name": "问题引入",
+      "start": 7.6,
+      "dur": 24.752063999999997,
+      "narrationDur": 20.352064,
+      "gap": 0.3,
+      "narrationOffset": 1,
+      "audio": "D:\\项目文件夹\\aigc课程\\scripts\\video\\audio\\scene_s1.wav",
+      "beats": [
+        {
+          "subtitle": "一门课的资料，往往散落在几十份课件与视频里；",
+          "start": 0,
+          "end": 4.536009
+        },
+        {
+          "subtitle": "知识点之间缺少联系，学生不知道该先学什么；",
+          "start": 4.836009,
+          "end": 9.108027
+        },
+        {
+          "subtitle": "而老师要手工梳理知识结构，动辄数周；",
+          "start": 9.408027,
+          "end": 13.512041
+        },
+        {
+          "subtitle": "答疑更是重复劳动，学情难以量化。",
+          "start": 13.812041,
+          "end": 17.38805
+        },
+        {
+          "subtitle": "知识，需要被重新组织。",
+          "start": 17.68805,
+          "end": 20.352064
+        }
+      ]
+    },
+    {
+      "key": "s2",
+      "name": "入口与角色",
+      "start": 31.952064,
+      "dur": 18.976032,
+      "narrationDur": 13.976032,
+      "gap": 2,
+      "narrationOffset": 1,
+      "audio": "D:\\项目文件夹\\aigc课程\\scripts\\video\\audio\\scene_s2.wav",
+      "beats": [
+        {
+          "subtitle": "智绘千里用一套系统，服务教师与学生两种角色。",
+          "start": 0,
+          "end": 4.824014
+        },
+        {
+          "subtitle": "教师负责建设知识图谱，学生负责沿着图谱学习——两端的权限完全隔离。",
+          "start": 6.824014,
+          "end": 13.976032
+        }
+      ]
+    },
+    {
+      "key": "s3",
+      "name": "教师端：从文档到图谱",
+      "start": 50.528096,
+      "dur": 52.084036,
+      "narrationDur": 46.584036,
+      "gap": 2,
+      "narrationOffset": 1,
+      "audio": "D:\\项目文件夹\\aigc课程\\scripts\\video\\audio\\scene_s3.wav",
+      "beats": [
+        {
+          "subtitle": "进入教师端，课程建设进度一目了然——资料数量、解析状态、知识点抽取进度、待校对节点，全部量化。",
+          "start": 0,
+          "end": 9.84
+        },
+        {
+          "subtitle": "上传课程文档，系统自动完成解析与知识点抽取。PDF、PPT、Word 均可，抽取结果实时可见。",
+          "start": 11.84,
+          "end": 21.872018
+        },
+        {
+          "subtitle": "也可以直接输入一个主题，由大模型生成完整的知识图谱——节点、层级、先修关系，一次成型。",
+          "start": 23.872018,
+          "end": 32.992018
+        },
+        {
+          "subtitle": "生成的图谱并非终点。教师可以在编辑器里增删节点、调整关系、修正属性，让机器产出真正变成可信的教学资产。",
+          "start": 34.992018,
+          "end": 46.584036
+        }
+      ]
+    },
+    {
+      "key": "s4",
+      "name": "学生端：探索知识图谱",
+      "start": 102.212132,
+      "dur": 36.404014,
+      "narrationDur": 30.904013999999997,
+      "gap": 2,
+      "narrationOffset": 1,
+      "audio": "D:\\项目文件夹\\aigc课程\\scripts\\video\\audio\\scene_s4.wav",
+      "beats": [
+        {
+          "subtitle": "切换到学生视角。3D 校园工作台把功能入口变成可探索的空间。",
+          "start": 0,
+          "end": 6.768005
+        },
+        {
+          "subtitle": "这就是课程的知识图谱。上百个知识点、三类语义关系，可以自由平移、缩放、旋转。点开任意节点，图片、视频、公式、代码，都在这里。",
+          "start": 8.768004999999999,
+          "end": 23.144014
+        },
+        {
+          "subtitle": "每个节点的掌握状态清晰可见，已掌握、待巩固一目了然。",
+          "start": 25.144014,
+          "end": 30.904013999999997
+        }
+      ]
+    },
+    {
+      "key": "s5",
+      "name": "学生端：问答 · 路径 · 测验",
+      "start": 138.21614599999998,
+      "dur": 36.592019,
+      "narrationDur": 30.592019,
+      "gap": 2,
+      "narrationOffset": 1,
+      "audio": "D:\\项目文件夹\\aigc课程\\scripts\\video\\audio\\scene_s5.wav",
+      "beats": [
+        {
+          "subtitle": "遇到问题，直接问 AI 助教。基于课程知识图谱的检索增强问答，每一条回答都能溯源到具体知识点。",
+          "start": 0,
+          "end": 9.984014
+        },
+        {
+          "subtitle": "系统根据先修关系，为每个学生推荐个性化的学习路径——先学什么、后学什么，不再靠猜。",
+          "start": 11.984014,
+          "end": 20.384014
+        },
+        {
+          "subtitle": "点进知识点，配套讲解与视频资源；学完立即小测，三题达标，形成完整的学习闭环。",
+          "start": 22.384014,
+          "end": 30.592019
+        }
+      ]
+    },
+    {
+      "key": "s6",
+      "name": "学习报告",
+      "start": 174.40816499999997,
+      "dur": 11.912018,
+      "narrationDur": 6.912018,
+      "gap": 2,
+      "narrationOffset": 1,
+      "audio": "D:\\项目文件夹\\aigc课程\\scripts\\video\\audio\\scene_s6.wav",
+      "beats": [
+        {
+          "subtitle": "所有学习行为都被记录成可量化的报告，学生看得见成长，教师看得见学情。",
+          "start": 0,
+          "end": 6.912018
+        }
+      ]
+    },
+    {
+      "key": "s7",
+      "name": "收尾",
+      "start": 185.92018299999995,
+      "dur": 8.100009,
+      "narrationDur": 4.896009,
+      "gap": 0.3,
+      "narrationOffset": 1,
+      "audio": "D:\\项目文件夹\\aigc课程\\scripts\\video\\audio\\scene_s7.wav",
+      "beats": [
+        {
+          "subtitle": "智绘千里——让散落的知识，连成一张可以行走的网。",
+          "start": 0,
+          "end": 4.896009
+        }
+      ]
+    }
+  ],
+  "total": 194.02019199999995
+}

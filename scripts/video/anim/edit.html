@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:#04070e}
+  #stage{position:relative;width:1920px;height:1080px;overflow:hidden;
+    background:
+      radial-gradient(ellipse 1050px 720px at 50% 44%, rgba(90,150,230,0.17) 0%, rgba(90,150,230,0) 62%),
+      radial-gradient(ellipse 700px 900px at 6% 90%, rgba(70,120,200,0.10) 0%, rgba(70,120,200,0) 60%),
+      linear-gradient(165deg,#0b1c33 0%,#102a48 34%,#123254 52%,#0c1e39 76%,#071223 100%)}
+  .grid-fine{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(150,195,240,0.055) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(150,195,240,0.055) 1px,transparent 1px);background-size:32px 32px}
+  .grid-bold{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(150,195,240,0.10) 1.5px,transparent 1.5px),
+    linear-gradient(90deg,rgba(150,195,240,0.10) 1.5px,transparent 1.5px);background-size:160px 160px}
+  .vig{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse 1500px 1000px at 50% 50%,rgba(0,0,0,0) 42%,rgba(0,0,0,0.62) 100%)}
+  svg{position:absolute;inset:0}
+  text{font-family:"Microsoft YaHei","微软雅黑",sans-serif}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="grid-fine"></div><div class="grid-bold"></div>
+  <svg id="svg" viewBox="0 0 1920 1080" width="1920" height="1080"></svg>
+  <div class="vig"></div>
+</div>
+<script>
+const clamp01=v=>v<0?0:v>1?1:v;
+const easeOut=p=>1-Math.pow(1-p,3);
+const easeInOut=p=>p<0.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const seg=(t,a,b)=>clamp01((t-a)/(b-a));
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("svg");
+const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+
+// 原始图
+const N=[
+  {x:660, y:392, r:20, t:"基础概念", hue:"#7fb2e8"},
+  {x:988, y:300, r:18, t:"TCP 协议", hue:"#7fb2e8"},
+  {x:1246,y:470, r:22, t:"拥塞控制", hue:"#f0c874"},   // 将被拖动
+  {x:960, y:640, r:18, t:"窗口机制", hue:"#7fe0c8"},
+  {x:596, y:700, r:17, t:"可靠传输", hue:"#c9a0f0"},
+  {x:1170,y:790, r:17, t:"快重传",   hue:"#c9a0f0"},   // 将被删除
+];
+const E=[[0,1],[1,2],[0,3],[3,2],[3,4],[3,5]];
+// 新增节点
+const NEW={x:1500,y:286,r:19,t:"慢启动",hue:"#7fe0c8"};
+
+const gE=el("g",{});svg.appendChild(gE);
+const edgeEls=E.map(([i,j])=>{
+  const a=N[i],b=N[j];
+  const ln=el("line",{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:"rgba(150,195,240,0.55)","stroke-width":1.6,opacity:0});
+  gE.appendChild(ln);return {ln,a,b,newEdge:false};
+});
+// 新增关系线（拥塞控制 → 慢启动）
+const newEdgeLen=Math.hypot(NEW.x-N[2].x,NEW.y-N[2].y);
+const newEdge=el("line",{x1:N[2].x,y1:N[2].y,x2:NEW.x,y2:NEW.y,stroke:"#7fe0c8","stroke-width":2,opacity:0});
+svg.appendChild(newEdge);
+
+const gN=el("g",{});svg.appendChild(gN);
+const nodeEls=N.map(n=>{
+  const halo=el("circle",{cx:n.x,cy:n.y,r:n.r*3,fill:n.hue,opacity:0,filter:"blur(9px)"});
+  const dot=el("circle",{cx:n.x,cy:n.y,r:n.r,fill:"rgba(14,32,56,0.95)",stroke:n.hue,"stroke-width":2.2,opacity:0});
+  const t=el("text",{x:n.x,y:n.y+n.r+30,"text-anchor":"middle",fill:"rgba(206,224,246,0.85)","font-size":19,"letter-spacing":2,opacity:0});
+  t.textContent=n.t;
+  gN.appendChild(halo);gN.appendChild(dot);gN.appendChild(t);
+  return {halo,dot,t};
+});
+// 选中环
+const selRing=el("circle",{cx:N[2].x,cy:N[2].y,r:N[2].r+16,fill:"none",stroke:"#f0c874","stroke-width":2.4,"stroke-dasharray":"10 8",opacity:0});
+svg.appendChild(selRing);
+// 删除标记
+const delG=el("g",{opacity:0});
+const delCircle=el("circle",{cx:N[5].x+34,cy:N[5].y-30,r:17,fill:"rgba(240,110,110,0.92)"});
+const delX1=el("line",{x1:N[5].x+27,y1:N[5].y-37,x2:N[5].x+41,y2:N[5].y-23,stroke:"#0b1c33","stroke-width":3,"stroke-linecap":"round"});
+const delX2=el("line",{x1:N[5].x+41,y1:N[5].y-37,x2:N[5].x+27,y2:N[5].y-23,stroke:"#0b1c33","stroke-width":3,"stroke-linecap":"round"});
+delG.appendChild(delCircle);delG.appendChild(delX1);delG.appendChild(delX2);svg.appendChild(delG);
+// 新节点
+const newHalo=el("circle",{cx:NEW.x,cy:NEW.y,r:NEW.r*3,fill:NEW.hue,opacity:0,filter:"blur(9px)"});
+const newNode=el("circle",{cx:NEW.x,cy:NEW.y,r:NEW.r,fill:"rgba(14,32,56,0.95)",stroke:NEW.hue,"stroke-width":2.2,opacity:0});
+const newT=el("text",{x:NEW.x,y:NEW.y+NEW.r+30,"text-anchor":"middle",fill:"rgba(200,232,222,0.9)","font-size":19,"letter-spacing":2,opacity:0});
+newT.textContent=NEW.t;
+svg.appendChild(newHalo);svg.appendChild(newNode);svg.appendChild(newT);
+// 顶部标签
+const cap=el("text",{x:960,y:172,"text-anchor":"middle",fill:"rgba(232,196,116,0.95)","font-size":25,"letter-spacing":11,opacity:0});
+cap.textContent="人工校对 · 增删节点与关系";
+svg.appendChild(cap);
+
+function draw(t){
+  cap.setAttribute("opacity",(easeOut(seg(t,0.1,0.7))*0.95).toFixed(3));
+  // 基础图
+  nodeEls.forEach((e,i)=>{
+    const a=easeOut(seg(t,0.1+i*0.06,0.6+i*0.06));
+    const fade=i===5?(1-easeInOut(seg(t,2.6,3.15))):1;
+    e.dot.setAttribute("opacity",(a*fade).toFixed(3));
+    e.t.setAttribute("opacity",(a*fade*0.9).toFixed(3));
+    e.halo.setAttribute("opacity",(a*fade*0.16).toFixed(3));
+  });
+  edgeEls.forEach((e,i)=>{
+    const a=easeOut(seg(t,0.35+i*0.06,0.95+i*0.06));
+    const fade=(e.a===N[5]||e.b===N[5])?(1-easeInOut(seg(t,2.6,3.15))):1;
+    e.ln.setAttribute("opacity",(a*fade*0.85).toFixed(3));
+  });
+  // 拖动节点 2
+  const drag=easeInOut(seg(t,0.95,1.85));
+  const nx=N[2].x+drag*112, ny=N[2].y-drag*54;
+  nodeEls[2].dot.setAttribute("cx",nx.toFixed(1));nodeEls[2].dot.setAttribute("cy",ny.toFixed(1));
+  nodeEls[2].halo.setAttribute("cx",nx.toFixed(1));nodeEls[2].halo.setAttribute("cy",ny.toFixed(1));
+  nodeEls[2].t.setAttribute("x",nx.toFixed(1));nodeEls[2].t.setAttribute("y",(ny+N[2].r+30).toFixed(1));
+  selRing.setAttribute("cx",nx.toFixed(1));selRing.setAttribute("cy",ny.toFixed(1));
+  selRing.setAttribute("opacity",(easeOut(seg(t,0.8,1.1))*(1-easeInOut(seg(t,2.3,2.7)))*0.95).toFixed(3));
+  selRing.setAttribute("transform",`rotate(${(t*40).toFixed(1)} ${nx.toFixed(1)} ${ny.toFixed(1)})`);
+  // 新节点 + 新关系
+  const na=easeOut(seg(t,1.95,2.45));
+  newNode.setAttribute("opacity",na.toFixed(3));
+  newT.setAttribute("opacity",(na*0.9).toFixed(3));
+  newHalo.setAttribute("opacity",(na*0.18).toFixed(3));
+  newNode.setAttribute("r",(NEW.r*na).toFixed(2));
+  const ea=easeOut(seg(t,2.25,2.9));
+  newEdge.setAttribute("x1",nx.toFixed(1));newEdge.setAttribute("y1",ny.toFixed(1));
+  newEdge.setAttribute("opacity",(ea*0.9).toFixed(3));
+  newEdge.setAttribute("stroke-dasharray",newEdgeLen.toFixed(1));
+  newEdge.setAttribute("stroke-dashoffset",(newEdgeLen*(1-ea)).toFixed(1));
+  // 删除标记
+  delG.setAttribute("opacity",(easeOut(seg(t,2.45,2.85))*0.98).toFixed(3));
+}
+window.__seek=t=>draw(t);
+window.__ready=true;
+window.__seek(0);
+</script>
+</body>
+</html>

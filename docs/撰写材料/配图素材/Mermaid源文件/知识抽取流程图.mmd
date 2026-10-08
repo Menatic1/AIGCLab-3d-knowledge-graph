@@ -1,0 +1,24 @@
+flowchart LR
+    subgraph 第一步
+        A[1<br/>📄 文档上传与解析<br/>PDF / Word / PPT<br/>多格式支持]
+    end
+    subgraph 第二步
+        B[2<br/>✂️ jieba 中文分词<br/>精确模式 + 2-gram 兜底<br/>专业术语完整保留]
+    end
+    subgraph 第三步
+        C[3<br/>🧠 LLM 知识抽取<br/>大模型 + 提示词工程<br/>结构化 JSON 输出]
+    end
+    subgraph 第四步
+        D[4<br/>🔀 关系映射与修正<br/>统一三类核心关系<br/>方向修正去重]
+    end
+    subgraph 第五步
+        E[5<br/>💾 去重与图谱入库<br/>节点名称匹配<br/>三元组关系去重]
+    end
+    
+    A --> B --> C --> D --> E
+    
+    style A fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style B fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+    style C fill:#fef3c7,stroke:#d97706,stroke-width:2px
+    style D fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style E fill:#fce7f3,stroke:#db2777,stroke-width:2px

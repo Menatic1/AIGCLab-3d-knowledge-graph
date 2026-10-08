@@ -37,7 +37,7 @@ export default function PathVisualization({ onFocusNode }: Props) {
   const masteredCount = masteredIds.size;
 
   return (
-    <div className="sketch-card p-5 h-full flex flex-col min-h-0 overflow-hidden">
+    <div className="sketch-card p-5 flex flex-col">
       <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
@@ -82,8 +82,8 @@ export default function PathVisualization({ onFocusNode }: Props) {
       ) : (
         <>
           {/* 横向时间线：阶段分组 + 节点链条 */}
-          <div className="relative flex-1 min-h-0 overflow-auto scrollbar-sketch">
-            <div className="min-w-[780px] p-3 pb-6 relative">
+          <div className="relative">
+            <div className="p-3 pb-6 relative">
               {/* 背景轨道 */}
               <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none">
                 <defs>
@@ -93,7 +93,7 @@ export default function PathVisualization({ onFocusNode }: Props) {
                 </defs>
               </svg>
 
-              <div className="flex items-stretch gap-4 relative">
+              <div className="grid grid-cols-1 lg:grid-cols-3 items-stretch gap-4 relative">
                 {pathStages.map((stage, stageIdx) => {
                   const stageNodes = chain.filter((c) => c.stage === stage.stage);
                   const stageMeta =
@@ -104,7 +104,7 @@ export default function PathVisualization({ onFocusNode }: Props) {
                         : { bg: 'from-sketch-purple/20 via-sketch-purple/5', header: 'bg-sketch-purple text-white', border: 'border-sketch-purple/40' };
 
                   return (
-                    <div key={stage.stage} className="flex-1 min-w-[220px]">
+                    <div key={stage.stage} className="min-w-0">
                       {/* 阶段标题 */}
                       <div
                         className={

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:#04070e}
+  #stage{position:relative;width:1920px;height:1080px;overflow:hidden;
+    background:
+      radial-gradient(ellipse 1050px 720px at 50% 44%, rgba(90,150,230,0.17) 0%, rgba(90,150,230,0) 62%),
+      radial-gradient(ellipse 700px 900px at 96% 12%, rgba(60,110,190,0.10) 0%, rgba(60,110,190,0) 60%),
+      linear-gradient(165deg,#0b1c33 0%,#102a48 34%,#123254 52%,#0c1e39 76%,#071223 100%)}
+  .grid-fine{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(150,195,240,0.055) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(150,195,240,0.055) 1px,transparent 1px);background-size:32px 32px}
+  .grid-bold{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(150,195,240,0.10) 1.5px,transparent 1.5px),
+    linear-gradient(90deg,rgba(150,195,240,0.10) 1.5px,transparent 1.5px);background-size:160px 160px}
+  .vig{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse 1500px 1000px at 50% 50%,rgba(0,0,0,0) 42%,rgba(0,0,0,0.62) 100%)}
+  svg{position:absolute;inset:0}
+  text{font-family:"Microsoft YaHei","微软雅黑",sans-serif}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="grid-fine"></div><div class="grid-bold"></div>
+  <svg id="svg" viewBox="0 0 1920 1080" width="1920" height="1080"></svg>
+  <div class="vig"></div>
+</div>
+<script>
+const clamp01=v=>v<0?0:v>1?1:v;
+const easeOut=p=>1-Math.pow(1-p,3);
+const seg=(t,a,b)=>clamp01((t-a)/(b-a));
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("svg");
+const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+
+// ── 左：提问气泡 ──
+const QX=200, QY=250, QW=560, QH=150;
+svg.appendChild(el("rect",{x:QX,y:QY,width:QW,height:QH,rx:20,fill:"rgba(16,36,62,0.92)",stroke:"rgba(150,195,240,0.55)","stroke-width":1.8}));
+const qTag=el("text",{x:QX+34,y:QY+52,fill:"rgba(232,196,116,0.95)","font-size":20,"letter-spacing":4});
+qTag.textContent="学生提问";
+svg.appendChild(qTag);
+const QTEXT="为什么需要拥塞控制？";
+const qChars=[...QTEXT].map((ch,i)=>{
+  const t=el("text",{x:QX+34+i*38,y:QY+108,fill:"#eaf3ff","font-size":34,opacity:0});
+  t.textContent=ch;svg.appendChild(t);return t;
+});
+
+// ── 右上：被检索命中的知识点 ──
+const HITS=[
+  {x:1240,y:212,t:"拥塞控制"},
+  {x:1560,y:330,t:"慢启动"},
+  {x:1420,y:560,t:"滑动窗口"},
+];
+const hitEls=HITS.map(h=>{
+  const g=el("g",{opacity:0});
+  const halo=el("circle",{cx:h.x,cy:h.y,r:56,fill:"#7fe0c8",opacity:0,filter:"blur(18px)"});
+  const c=el("circle",{cx:h.x,cy:h.y,r:38,fill:"rgba(12,28,50,0.95)",stroke:"#7fe0c8","stroke-width":2.2});
+  const t=el("text",{x:h.x,y:h.y+72,"text-anchor":"middle",fill:"rgba(200,232,222,0.95)","font-size":20,"letter-spacing":3});
+  t.textContent=h.t;
+  g.appendChild(halo);g.appendChild(c);g.appendChild(t);svg.appendChild(g);
+  return {g,halo,c};
+});
+// 检索射线
+const RAYS=HITS.map(h=>{
+  const x1=QX+QW, y1=QY+QH/2;
+  const len=Math.hypot(h.x-x1,h.y-y1);
+  const ln=el("line",{x1,y1,x2:h.x,y2:h.y,stroke:"#7fe0c8","stroke-width":1.5,"stroke-dasharray":"8 8",opacity:0});
+  svg.appendChild(ln);return {ln,len};
+});
+
+// ── 左下：回答气泡（流式）──
+const AX=200, AY=470, AW=880, AH=380;
+svg.appendChild(el("rect",{x:AX,y:AY,width:AW,height:AH,rx:20,fill:"rgba(16,36,62,0.92)",stroke:"rgba(127,224,200,0.45)","stroke-width":1.8}));
+const aTag=el("text",{x:AX+34,y:AY+52,fill:"rgba(127,224,200,0.95)","font-size":20,"letter-spacing":4});
+aTag.textContent="AI 助教 · 基于知识图谱检索增强";
+svg.appendChild(aTag);
+const LINES=["拥塞控制用于避免网络过载：","当发送速率超过链路容量时，","队列溢出导致丢包与延迟激增。","慢启动与拥塞避免共同调节窗口。"];
+const aChars=[];
+LINES.forEach((ln,i)=>{
+  [...ln].forEach((ch,j)=>{
+    const t=el("text",{x:AX+34+j*27,y:AY+118+i*62,fill:"rgba(226,240,252,0.95)","font-size":27,opacity:0});
+    t.textContent=ch;svg.appendChild(t);
+    aChars.push({t,order:i*100+j});
+  });
+});
+// 溯源标记
+const srcTag=el("g",{opacity:0});
+srcTag.appendChild(el("rect",{x:AX+34,y:AY+330,width:250,height:34,rx:17,fill:"rgba(232,196,116,0.16)",stroke:"rgba(232,196,116,0.6)","stroke-width":1.4}));
+const st=el("text",{x:AX+58,y:AY+354,fill:"rgba(240,216,150,0.95)","font-size":19,"letter-spacing":3});
+st.textContent="来源：拥塞控制 · 慢启动";
+srcTag.appendChild(st);svg.appendChild(srcTag);
+
+function draw(t){
+  // 提问逐字
+  const qn=qChars.length;
+  qChars.forEach((c,i)=>{
+    const a=seg(t,0.15+i*0.055,0.3+i*0.055);
+    c.setAttribute("opacity",a.toFixed(3));
+  });
+  // 检索射线 → 命中
+  RAYS.forEach((r,i)=>{
+    const a=easeOut(seg(t,0.95+i*0.16,1.5+i*0.16));
+    r.ln.setAttribute("opacity",(a*0.65).toFixed(3));
+    r.ln.setAttribute("stroke-dashoffset",((1-a)*r.len).toFixed(1));
+  });
+  hitEls.forEach((h,i)=>{
+    const a=easeOut(seg(t,1.25+i*0.16,1.75+i*0.16));
+    h.g.setAttribute("opacity",a.toFixed(3));
+    h.halo.setAttribute("opacity",(a*0.2*(0.7+0.3*Math.sin(t*3+i))).toFixed(3));
+  });
+  // 回答流式
+  const total=aChars.length;
+  aChars.forEach(c=>{
+    const a=seg(t,1.95+ (c.order/total)*1.25, 2.15+ (c.order/total)*1.25);
+    c.t.setAttribute("opacity",a.toFixed(3));
+  });
+  srcTag.setAttribute("opacity",(easeOut(seg(t,3.15,3.5))*0.98).toFixed(3));
+}
+window.__seek=t=>draw(t);
+window.__ready=true;
+window.__seek(0);
+</script>
+</body>
+</html>

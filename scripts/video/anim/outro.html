@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #04070e; }
+
+  #stage {
+    position: relative; width: 1920px; height: 1080px; overflow: hidden;
+    background:
+      radial-gradient(ellipse 1050px 720px at 50% 40%, rgba(90,150,230,0.16) 0%, rgba(90,150,230,0) 62%),
+      radial-gradient(ellipse 700px 900px at 6% 90%, rgba(70,120,200,0.10) 0%, rgba(70,120,200,0) 60%),
+      radial-gradient(ellipse 700px 900px at 96% 10%, rgba(60,110,190,0.10) 0%, rgba(60,110,190,0) 60%),
+      linear-gradient(165deg, #0b1c33 0%, #102a48 34%, #123254 52%, #0c1e39 76%, #071223 100%);
+  }
+  .grid-fine {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(150,195,240,0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(150,195,240,0.055) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .grid-bold {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(150,195,240,0.10) 1.5px, transparent 1.5px),
+      linear-gradient(90deg, rgba(150,195,240,0.10) 1.5px, transparent 1.5px);
+    background-size: 160px 160px;
+  }
+  .grid-mask {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 1250px 1050px at 50% 46%, rgba(8,18,36,0.60) 0%, rgba(8,18,36,0) 58%);
+  }
+  .vig {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 1500px 1000px at 50% 50%, rgba(0,0,0,0) 42%, rgba(0,0,0,0.62) 100%);
+  }
+  .grain {
+    position: absolute; inset: 0; opacity: 0.5; mix-blend-mode: overlay; pointer-events: none;
+    background-image:
+      radial-gradient(circle at 9% 17%, rgba(255,255,255,0.06) 0 1.5px, transparent 2.5px),
+      radial-gradient(circle at 74% 9%, rgba(255,255,255,0.05) 0 1.5px, transparent 2.5px),
+      radial-gradient(circle at 31% 71%, rgba(0,0,0,0.07) 0 2px, transparent 3px),
+      radial-gradient(circle at 86% 64%, rgba(0,0,0,0.06) 0 2px, transparent 3px),
+      radial-gradient(circle at 52% 34%, rgba(255,255,255,0.04) 0 1px, transparent 2px),
+      radial-gradient(circle at 64% 86%, rgba(0,0,0,0.05) 0 1.5px, transparent 2.5px);
+  }
+  .fadeout {
+    position: absolute; inset: 0; background: #04070e; opacity: 0; pointer-events: none; z-index: 50;
+  }
+
+  .corner { position: absolute; width: 54px; height: 54px; opacity: 0.5; }
+  .corner::before, .corner::after { content: ''; position: absolute; background: rgba(214,170,84,0.5); }
+  .corner::before { width: 54px; height: 1.5px; }
+  .corner::after { width: 1.5px; height: 54px; }
+  .c-tl { top: 48px; left: 48px; }
+  .c-tr { top: 48px; right: 48px; transform: scaleX(-1); }
+  .c-bl { bottom: 48px; left: 48px; transform: scaleY(-1); }
+  .c-br { bottom: 48px; right: 48px; transform: scale(-1,-1); }
+
+  /* ═════ 顶部标识 ═════ */
+  .head {
+    position: absolute; left: 0; right: 0; top: 176px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .logo {
+    font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+    font-size: 96px; font-weight: 800; letter-spacing: 22px; padding-left: 22px; line-height: 1;
+    background: linear-gradient(180deg, #fffaea 0%, #f7e0a0 26%, #e6bd63 48%, #c99a3c 66%, #a8792a 82%, #ffeec4 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(214,170,84,0.42));
+    opacity: 0;
+  }
+  .prod {
+    margin-top: 22px;
+    font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+    font-size: 26px; font-weight: 300; letter-spacing: 10px; padding-left: 10px;
+    color: rgba(206,224,246,0.9);
+    text-shadow: 0 3px 14px rgba(0,0,0,0.7);
+    opacity: 0;
+  }
+  .hrule {
+    margin-top: 30px; height: 1.5px; width: 0px;
+    background: linear-gradient(90deg, rgba(214,170,84,0) 0%, rgba(230,190,110,0.9) 50%, rgba(214,170,84,0) 100%);
+  }
+
+  /* ═════ 数据条 ═════ */
+  .metrics {
+    position: absolute; left: 0; right: 0; top: 596px;
+    display: flex; justify-content: center; gap: 0;
+  }
+  .metric {
+    width: 400px; display: flex; flex-direction: column; align-items: center;
+    opacity: 0;
+  }
+  .metric + .metric { border-left: 1px solid rgba(120,170,220,0.18); }
+  .m-val {
+    font-family: "Times New Roman", "Microsoft YaHei", serif;
+    font-size: 78px; font-weight: 700; line-height: 1; letter-spacing: 1px;
+    background: linear-gradient(180deg, #ffffff 0%, #dff0ff 40%, #8fc4ea 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 22px rgba(120,190,240,0.5));
+  }
+  .m-val .u { font-size: 34px; font-weight: 400; letter-spacing: 0; }
+  .m-lab {
+    margin-top: 16px;
+    font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+    font-size: 21px; font-weight: 300; letter-spacing: 3px;
+    color: rgba(178,206,238,0.82);
+  }
+  .m-tick {
+    margin-top: 14px; width: 0px; height: 2px; background: rgba(214,170,84,0.75);
+  }
+
+  /* ═════ 标语 ═════ */
+  .slogan {
+    position: absolute; left: 0; right: 0; top: 848px;
+    text-align: center; opacity: 0;
+    font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+    font-size: 40px; font-weight: 400; letter-spacing: 14px; padding-left: 14px;
+    color: #f2e2b6;
+    text-shadow: 0 4px 18px rgba(0,0,0,0.72), 0 0 30px rgba(214,170,84,0.35);
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="grid-fine"></div>
+  <div class="grid-bold"></div>
+  <div class="grid-mask"></div>
+  <div class="vig"></div>
+
+  <div class="corner c-tl"></div>
+  <div class="corner c-tr"></div>
+  <div class="corner c-bl"></div>
+  <div class="corner c-br"></div>
+
+  <div class="head">
+    <div class="logo" id="logo">智绘千里</div>
+    <div class="prod" id="prod">AIGC 知识图谱智能导学系统</div>
+    <div class="hrule" id="hrule"></div>
+  </div>
+
+  <div class="metrics" id="metrics">
+    <div class="metric" data-i="0">
+      <div class="m-val"><span class="num" data-to="100" data-dec="0">0</span><span class="u">+</span></div>
+      <div class="m-lab">知识节点 · 全部课程</div>
+      <div class="m-tick"></div>
+    </div>
+    <div class="metric" data-i="1">
+      <div class="m-val"><span class="num" data-to="3" data-dec="0">0</span><span class="u"> 类</span></div>
+      <div class="m-lab">语义关系 · 包含/先修/关联</div>
+      <div class="m-tick"></div>
+    </div>
+    <div class="metric" data-i="2">
+      <div class="m-val"><span class="num" data-to="88.9" data-dec="1">0</span><span class="u">%</span></div>
+      <div class="m-lab">知识抽取精确率</div>
+      <div class="m-tick"></div>
+    </div>
+    <div class="metric" data-i="3">
+      <div class="m-val"><span class="num" data-to="224.8" data-dec="1">0</span><span class="u">ms</span></div>
+      <div class="m-lab">问答平均首响</div>
+      <div class="m-tick"></div>
+    </div>
+  </div>
+
+  <div class="slogan" id="slogan">让知识连成一张网</div>
+
+  <div class="grain"></div>
+  <div class="fadeout" id="fadeout"></div>
+</div>
+
+<script>
+const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+const easeOut = p => 1 - Math.pow(1 - p, 3);
+const easeInOut = p => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const seg = (t, a, b) => clamp01((t - a) / (b - a));
+
+const $ = id => document.getElementById(id);
+const logo = $('logo'), prod = $('prod'), hrule = $('hrule'), slogan = $('slogan');
+const metrics = Array.from(document.querySelectorAll('.metric'));
+const nums = metrics.map(m => m.querySelector('.num'));
+const ticks = metrics.map(m => m.querySelector('.m-tick'));
+const fadeout = $('fadeout');
+
+const T_START = 0.55;     // 数据条起始
+const STEP = 0.42;        // 逐条间隔
+
+function draw(t) {
+  // 标识
+  const la = seg(t, 0.15, 1.05);
+  logo.style.opacity = easeOut(la).toFixed(3);
+  logo.style.transform = `translateY(${((1 - easeOut(la)) * 24).toFixed(1)}px)`;
+
+  const pa = seg(t, 0.55, 1.45);
+  prod.style.opacity = easeOut(pa).toFixed(3);
+
+  hrule.style.width = (easeInOut(seg(t, 0.85, 1.75)) * 720).toFixed(1) + 'px';
+
+  // 数据条
+  metrics.forEach((m, i) => {
+    const a = seg(t, T_START + i * STEP, T_START + i * STEP + 0.6);
+    m.style.opacity = easeOut(a).toFixed(3);
+    m.style.transform = `translateY(${((1 - easeOut(a)) * 22).toFixed(1)}px)`;
+
+    const to = parseFloat(nums[i].dataset.to);
+    const dec = parseInt(nums[i].dataset.dec, 10);
+    const cv = to * easeInOut(seg(t, T_START + i * STEP + 0.08, T_START + i * STEP + 0.95));
+    nums[i].textContent = dec ? cv.toFixed(dec) : Math.round(cv).toString();
+
+    ticks[i].style.width = (easeOut(seg(t, T_START + i * STEP + 0.35, T_START + i * STEP + 1.05)) * 62).toFixed(1) + 'px';
+  });
+
+  // 标语
+  const sa = seg(t, 3.75, 4.75);
+  slogan.style.opacity = easeOut(sa).toFixed(3);
+  slogan.style.transform = `translateY(${((1 - easeOut(sa)) * 16).toFixed(1)}px)`;
+
+  // 结尾淡出
+  fadeout.style.opacity = easeInOut(seg(t, 7.15, 8.05)).toFixed(3);
+}
+
+window.__seek = function (t) { draw(t); };
+window.__ready = true;
+window.__seek(0);
+</script>
+</body>
+</html>

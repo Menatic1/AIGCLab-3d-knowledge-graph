@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -15,6 +17,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=2, max_length=32, description="用户名")
     password: str = Field(..., min_length=6, max_length=64, description="密码")
+    role: Literal["teacher", "student"] = "student"
 
 
 class LoginRequest(BaseModel):
@@ -31,13 +34,13 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     import uuid as _uuid
     user_id = str(_uuid.uuid4()).replace("-", "")[:20]
     hashed, salt = hash_password(payload.password)
-    user = User(id=user_id, username=payload.username, hashed_password=hashed, salt=salt)
+    user = User(id=user_id, username=payload.username, hashed_password=hashed, salt=salt, role=payload.role)
     db.add(user)
     db.commit()
     token = create_token(user.id, user.username)
     return {
         "token": token,
-        "user": {"id": user.id, "username": user.username},
+        "user": {"id": user.id, "username": user.username, "role": user.role},
     }
 
 
@@ -50,11 +53,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     token = create_token(user.id, user.username)
     return {
         "token": token,
-        "user": {"id": user.id, "username": user.username},
+        "user": {"id": user.id, "username": user.username, "role": user.role},
     }
 
 
 @router.get("/me")
 def me(user: User = Depends(get_current_user)):
     """获取当前登录用户信息。"""
-    return {"id": user.id, "username": user.username}
+    return {"id": user.id, "username": user.username, "role": user.role}

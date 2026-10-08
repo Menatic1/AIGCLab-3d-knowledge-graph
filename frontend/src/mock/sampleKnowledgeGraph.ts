@@ -1,4 +1,4 @@
-import type { KnowledgeGraph, ChatMessage } from '../types';
+import type { KnowledgeGraph, ChatMessage, MultimodalType } from '../types';
 
 // ==================== 知识点分类颜色映射 ====================
 export const CATEGORY_META: Record<string, { label: string; color: string; bgColor: string }> = {
@@ -8,6 +8,17 @@ export const CATEGORY_META: Record<string, { label: string; color: string; bgCol
   algorithm:  { label: '算法',     color: '#a68ac9', bgColor: '#e6dcf2' },
   device:     { label: '设备',     color: '#d98787', bgColor: '#f2dcdc' },
   application:{ label: '应用',     color: '#e8cf6a', bgColor: '#f5ecd0' },
+  image:      { label: '图片资源', color: '#cb6d73', bgColor: '#f4dcdf' },
+  formula:    { label: '公式资源', color: '#8170b4', bgColor: '#e6e0f3' },
+  code:       { label: '代码资源', color: '#447f91', bgColor: '#d8e9ec' },
+  video:      { label: '视频资源', color: '#c07736', bgColor: '#f5e4d2' },
+};
+
+export const MULTIMODAL_META: Record<MultimodalType, { label: string; color: string; bgColor: string; marker: string }> = {
+  image: { label: '图片资源', color: '#cb6d73', bgColor: '#f4dcdf', marker: '图' },
+  formula: { label: '公式资源', color: '#8170b4', bgColor: '#e6e0f3', marker: '式' },
+  code: { label: '代码资源', color: '#447f91', bgColor: '#d8e9ec', marker: '码' },
+  video: { label: '视频资源', color: '#c07736', bgColor: '#f5e4d2', marker: '视' },
 };
 
 // ==================== 关系类型元数据 ====================
@@ -216,6 +227,35 @@ export const sampleKnowledgeGraph: KnowledgeGraph = {
       examples: ['1-坚持 CSMA: 空闲立即发', 'p-坚持 CSMA: 空闲以概率 p 发'],
       resources: [{ title: '三种 CSMA 吞吐对比', url: '#' }],
     },
+    // ==== 多模态学习资源（独立图谱节点）====
+    {
+      id: 'm1', name: 'CRC 校验流程图', category: 'image', importance: 3,
+      description: '以图示方式呈现发送端补零、模2除法和接收端校验的完整流程。',
+      definition: '发送端为数据补 r 个 0，使用生成多项式 G(x) 完成模2除法后附加余数；接收端以相同多项式复核余数。',
+      examples: ['数据 D → 补零 → 模2除法 → FCS → 帧尾校验'], resources: [],
+      multimodal: { type: 'image', content: '数据帧 D|补 r 个 0|模2除法|余数 FCS|接收端复核', caption: 'CRC 发送端与接收端校验流程' },
+    },
+    {
+      id: 'm2', name: 'CRC 生成多项式公式', category: 'formula', importance: 3,
+      description: 'CRC 校验中计算帧校验序列 FCS 的核心表达式。',
+      definition: '设生成多项式 G(x) 的阶为 r，发送端对 D(x)×x^r 进行模2除法，余数即为 FCS。',
+      examples: ['CRC-16: x^16 + x^15 + x^2 + 1'], resources: [],
+      multimodal: { type: 'formula', content: 'FCS(x) = remainder[ D(x) · x^r / G(x) ]', caption: 'CRC 帧校验序列计算式' },
+    },
+    {
+      id: 'm3', name: 'CRC 校验代码示例', category: 'code', importance: 3,
+      description: '用 JavaScript 演示按位异或完成 CRC 余数计算的核心逻辑。',
+      definition: '代码将输入比特串补齐后逐位与生成多项式进行异或，最终得到用于帧校验的余数。',
+      examples: ['输入: 1101011011', '生成多项式: 10011'], resources: [],
+      multimodal: { type: 'code', language: 'JavaScript', content: "function crc(data, generator) {\n  let bits = data + '0'.repeat(generator.length - 1);\n  for (let i = 0; i <= bits.length - generator.length; i++) {\n    if (bits[i] === '1') {\n      for (let j = 0; j < generator.length; j++) {\n        bits = bits.slice(0, i + j) +\n          (bits[i + j] === generator[j] ? '0' : '1') + bits.slice(i + j + 1);\n      }\n    }\n  }\n  return bits.slice(-(generator.length - 1));\n}" },
+    },
+    {
+      id: 'm4', name: 'CRC 计算动画讲解', category: 'video', importance: 3,
+      description: '通过分镜动画解释 CRC 从补零到接收端复核的计算过程。',
+      definition: '视频将一次 CRC 计算拆为补零、异或、移位、附加余数和校验五个步骤，适合首次学习时跟随观看。',
+      examples: ['5 个步骤', '1 个完整计算案例'], resources: [],
+      multimodal: { type: 'video', content: '补零准备|逐位异或|得到余数|附加 FCS|接收端校验', caption: 'CRC 计算动画讲解', duration: '03:42' },
+    },
   ],
   relations: [
     // ====== 包含关系（蓝色）======
@@ -242,6 +282,10 @@ export const sampleKnowledgeGraph: KnowledgeGraph = {
     { id: 'r21', source: 'n1', target: 'n23', type: 'contains', label: '包含' },
     { id: 'r22', source: 'n23', target: 'n24', type: 'contains', label: '包含' },
     { id: 'r23', source: 'n3', target: 'n25', type: 'contains', label: '包含' },
+    { id: 'r24', source: 'n4', target: 'm1', type: 'contains', label: '图示说明' },
+    { id: 'r25', source: 'n5', target: 'm2', type: 'contains', label: '公式推导' },
+    { id: 'r26', source: 'n5', target: 'm3', type: 'contains', label: '代码实践' },
+    { id: 'r27', source: 'n4', target: 'm4', type: 'contains', label: '视频讲解' },
 
     // ====== 前置关系（橙色实线）======
     { id: 'p1', source: 'n2', target: 'n3',  type: 'prerequisite', label: '前置于' },

@@ -1,0 +1,31 @@
+graph TD
+    subgraph 知识图谱_先修关系DAG
+        A[基础知识] --> B[进阶概念]
+        A --> C[核心概念]
+        B --> D[综合应用]
+        C --> D
+        D --> E[拓展提升]
+    end
+    
+    subgraph 拓扑排序算法
+        T1[入度为0的节点入队] --> T2[出队并标记已学习]
+        T2 --> T3[后继节点入度减1]
+        T3 --> T4{入度等于零}
+        T4 -->|是| T1
+        T4 -->|否| T5[输出学习路径]
+    end
+    
+    subgraph 个性化学习路径
+        S1[第1步 基础知识] --> S2[第2步 进阶概念]
+        S2 --> S3[第3步 核心知识]
+        S3 --> S4[第4步 综合应用]
+        S4 --> S5[第5步 拓展提升]
+    end
+    
+    style A fill:#86efac,stroke:#16a34a,stroke-width:2px
+    style C fill:#86efac,stroke:#16a34a,stroke-width:2px
+    style S1 fill:#86efac,stroke:#16a34a,stroke-width:2px
+    style S3 fill:#86efac,stroke:#16a34a,stroke-width:2px
+    style S2 fill:#e0e7ff,stroke:#6366f1,stroke-width:2px
+    style S4 fill:#e0e7ff,stroke:#6366f1,stroke-width:2px
+    style S5 fill:#e0e7ff,stroke:#6366f1,stroke-width:2px

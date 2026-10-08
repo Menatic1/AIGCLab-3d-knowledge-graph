@@ -4,19 +4,19 @@ import App from './App'
 import './index.css'
 import { AuthProvider } from './context/AuthContext'
 import { KnowledgeProvider } from './context/KnowledgeContext'
-import { TutorProvider } from './context/TutorContext'
 import { TabProvider } from './context/TabContext'
+import { CourseProvider } from './context/CourseContext'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AuthProvider>
-      <TutorProvider>
+      <CourseProvider>
         <KnowledgeProvider>
           <TabProvider>
             <App />
           </TabProvider>
         </KnowledgeProvider>
-      </TutorProvider>
+      </CourseProvider>
     </AuthProvider>
   </React.StrictMode>,
 )

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Sparkles, Loader2, CheckCircle2, AlertTriangle, Share2, BookOpen, Cpu, Network } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle2, AlertTriangle, Share2, BookOpen, Cpu } from 'lucide-react';
 import { useTabs } from '../context/TabContext';
 import { useKnowledge } from '../context/KnowledgeContext';
-import { API_BASE } from '../lib/graphMap';
+import { useCourse } from '../context/CourseContext';
+import { mapBackendGraph, API_BASE } from '../lib/graphMap';
 import { authedFetch } from '../context/AuthContext';
 
 // 留空 → 后端使用 .env 里的 LLM_MODEL（火山方舟推理接入点 ep-xxx 或 doubao-seed-2-1-pro-260628）
@@ -10,7 +11,6 @@ const DEFAULT_MODEL = '';
 
 interface GenResult {
   topic: string;
-  graph_id: string | null;
   nodes_count: number;
   relations_count: number;
   used_llm: boolean;
@@ -19,7 +19,8 @@ interface GenResult {
 
 export default function AIGCGeneratePage() {
   const { openTab } = useTabs();
-  const { loadGraphById, refreshGraphList } = useKnowledge();
+  const { hasGraph, reloadGraph } = useKnowledge();
+  const { currentCourseId } = useCourse();
   const [topic, setTopic] = useState('');
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -33,6 +34,10 @@ export default function AIGCGeneratePage() {
       setError('请输入课程主题');
       return;
     }
+    if (currentCourseId === null) {
+      setError('请先在顶部课程选择器中选择或创建一门课程，生成的图谱将归入该课程。');
+      return;
+    }
     setLoading(true);
     setError(null);
     setResult(null);
@@ -43,21 +48,17 @@ export default function AIGCGeneratePage() {
       const resp = await authedFetch(`${API_BASE}/api/aigc/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: t, model: model.trim() || undefined }),
+        body: JSON.stringify({ topic: t, model: model.trim() || undefined, course_id: currentCourseId ?? undefined }),
         signal: controller.signal,
       });
       const data = await resp.json();
       if (!resp.ok) {
         throw new Error(data?.detail || `请求失败 (${resp.status})`);
       }
-      // 通过新接口的 graph_id 加载到 KnowledgeContext（独立存储，不依赖注入事件）
-      if (data.graph_id) {
-        await loadGraphById(data.graph_id);
-        refreshGraphList();
-      }
+      // 后端已将图谱持久化到数据库，重新拉取确保显示的是已保存的完整图谱。
+      await reloadGraph();
       setResult({
         topic: data.topic,
-        graph_id: data.graph_id || null,
         nodes_count: data.nodes_count ?? (data.nodes?.length ?? 0),
         relations_count: data.relations_count ?? (data.relations?.length ?? 0),
         used_llm: !!data.used_llm,
@@ -196,14 +197,11 @@ export default function AIGCGeneratePage() {
               {result.summary}
             </div>
           )}
-          <div className="flex gap-2 flex-wrap">
-            <button onClick={() => openTab('graph')} className="sketch-btn-primary flex-1 justify-center min-w-[140px]">
+          <div className="flex gap-2">
+            <button onClick={() => openTab('graph')} className="sketch-btn-primary flex-1 justify-center">
               <Share2 size={16} /> 查看知识图谱
             </button>
-            <button onClick={() => openTab('graph-list')} className="sketch-btn-secondary justify-center">
-              <Network size={16} /> 我的图谱
-            </button>
-            <button onClick={() => openTab('resources')} className="sketch-btn-secondary justify-center">
+            <button onClick={() => openTab('resources')} className="sketch-btn-secondary flex-1 justify-center">
               <BookOpen size={16} /> 学习资源
             </button>
           </div>
@@ -211,9 +209,9 @@ export default function AIGCGeneratePage() {
       )}
 
       {/* 已有图谱提示 */}
-      {!loading && !result && (
+      {hasGraph && !loading && !result && (
         <div className="text-center text-xs text-ink-light opacity-75">
-          每次生成都会独立保存为新图谱，可在「我的图谱」中随时切换查看。
+          当前已加载图谱，新生成将覆盖显示。
         </div>
       )}
     </div>

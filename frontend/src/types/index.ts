@@ -1,5 +1,25 @@
 // 知识点分类
-export type NodeCategory = 'foundation' | 'concept' | 'protocol' | 'algorithm' | 'device' | 'application';
+export type NodeCategory =
+  | 'foundation'
+  | 'concept'
+  | 'protocol'
+  | 'algorithm'
+  | 'device'
+  | 'application'
+  | 'image'
+  | 'formula'
+  | 'code'
+  | 'video';
+
+export type MultimodalType = 'image' | 'formula' | 'code' | 'video';
+
+export interface MultimodalContent {
+  type: MultimodalType;
+  content: string;
+  caption?: string;
+  duration?: string;
+  language?: string;
+}
 
 // 关系类型 - 至少3种
 export type RelationType = 'contains' | 'prerequisite' | 'related';
@@ -13,6 +33,8 @@ export interface KnowledgeNode {
   definition: string;
   examples: string[];
   resources: { title: string; url: string }[];
+  // 图片、公式、代码和视频会以独立节点出现，前端先保存其演示内容。
+  multimodal?: MultimodalContent;
   importance: number; // 1-5，影响节点大小
   // 力导向图用
   x?: number;
@@ -71,6 +93,20 @@ export interface PathRecommendation {
   satisfiedPrerequisites: string[];
   missingPrerequisites: string[];
   learningOrder: number; // 建议学习顺序
+  reason?: string;
+  latestAccuracy?: number;
+}
+
+export type LearningPreference = 'reinforce' | 'balanced' | 'challenge';
+
+// 每次小测试的答题结果。当前前端以浏览器本地记录为准，后续可直接同步至后端。
+export interface QuizAttempt {
+  id: string;
+  nodeId: string;
+  correct: number;
+  total: number;
+  accuracy: number;
+  completedAt: string;
 }
 
 // 路径阶段

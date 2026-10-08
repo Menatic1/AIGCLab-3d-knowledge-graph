@@ -5,10 +5,11 @@ import type { PathRecommendation } from '../../types';
 
 interface Props {
   onFocusNode?: (id: string) => void;
+  onStartQuiz?: (id: string) => void;
 }
 
-export default function PathRecommendation({ onFocusNode }: Props) {
-  const { graph, recommendations, masteredIds, markAsMastered, regenerateRecommendations } = useKnowledge();
+export default function PathRecommendation({ onFocusNode, onStartQuiz }: Props) {
+  const { graph, recommendations, masteredIds, regenerateRecommendations } = useKnowledge();
   if (!graph) return null;
 
   const masteredCount = masteredIds.size;
@@ -19,7 +20,7 @@ export default function PathRecommendation({ onFocusNode }: Props) {
   const topList = recommendations.slice(0, 10);
 
   return (
-    <div className="sketch-card p-5 h-full flex flex-col min-h-0 overflow-hidden">
+    <div className="sketch-card p-5 h-full min-h-0 flex flex-col overflow-hidden">
       <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
@@ -29,9 +30,7 @@ export default function PathRecommendation({ onFocusNode }: Props) {
             <h3 className="font-bold text-ink handwritten text-lg">下一步学习推荐</h3>
           </div>
           <p className="text-[12px] text-ink-light leading-snug max-w-md">
-            基于「前置关系」图遍历算法：
-            <br />
-            已掌握节点 → 寻找前置已满足的候选 → 按前置满足率 × 重要性排序。
+            综合前置关系、重点程度、测试正确率和你的学习偏好，实时重排下一步学习顺序。
           </p>
         </div>
         <button
@@ -89,7 +88,7 @@ export default function PathRecommendation({ onFocusNode }: Props) {
               rec={r}
               graph={graph}
               onFocus={onFocusNode}
-              onMaster={() => markAsMastered(r.nodeId)}
+              onQuiz={() => onStartQuiz?.(r.nodeId)}
             />
           ))}
         </div>
@@ -103,13 +102,13 @@ function RecRow({
   rec,
   graph,
   onFocus,
-  onMaster,
+  onQuiz,
 }: {
   idx: number;
   rec: PathRecommendation;
   graph: NonNullable<ReturnType<typeof useKnowledge>['graph']>;
   onFocus?: (id: string) => void;
-  onMaster: () => void;
+  onQuiz: () => void;
 }) {
   const node = graph.nodes.find((n) => n.id === rec.nodeId);
   if (!node) return null;
@@ -163,6 +162,11 @@ function RecRow({
           <p className="text-[11.5px] text-ink-light leading-snug line-clamp-2 mb-1.5">
             {node.description}
           </p>
+          {rec.reason && (
+            <p className="text-[10.5px] text-sketch-blueDeep bg-sketch-blue/8 border border-sketch-blue/15 rounded px-2 py-1 mb-1.5">
+              推荐原因：{rec.reason}
+            </p>
+          )}
           {/* 前置满足条 */}
           {totalPres > 0 && (
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -194,11 +198,11 @@ function RecRow({
         </div>
         <div className="shrink-0 flex flex-col gap-1.5">
           <button
-            onClick={onMaster}
+            onClick={onQuiz}
             className="sketch-btn-success text-[11px] !py-1 !px-2.5"
-            title="标记为已掌握"
+            title="进入小测试"
           >
-            <CheckCircle size={12} /> 学会了
+            <CheckCircle size={12} /> 去测试
           </button>
           <button
             onClick={() => onFocus?.(rec.nodeId)}

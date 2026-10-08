@@ -103,15 +103,33 @@ def get_current_user(
     return user
 
 
+def require_role(*roles: str):
+    """返回一个依赖：要求当前用户属于指定角色之一。"""
+    def _check(user: User = Depends(get_current_user)) -> User:
+        if user.role not in roles:
+            raise HTTPException(status_code=403, detail=f"需要角色: {', '.join(roles)}")
+        return user
+    return _check
+
+
+require_teacher = require_role("teacher")
+require_student = require_role("student")
+
+
 def get_current_user_optional(
     authorization: str = Header(default=""),
     db: Session = Depends(get_db),
 ) -> User | None:
     """可选认证：有 token 就验证，没有就返回 None（用于公开接口）。"""
-    if not authorization.startswith("Bearer "):
+    if not authorization:
         return None
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="未提供认证 Token")
     token = authorization[7:]
     payload = decode_token(token)
     if not payload:
-        return None
-    return db.query(User).filter(User.id == payload["user_id"]).first()
+        raise HTTPException(status_code=401, detail="Token 无效或已过期")
+    user = db.query(User).filter(User.id == payload["user_id"]).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="用户不存在")
+    return user

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:#04070e}
+  #stage{position:relative;width:1920px;height:1080px;overflow:hidden;
+    background:
+      radial-gradient(ellipse 1050px 720px at 50% 44%, rgba(90,150,230,0.17) 0%, rgba(90,150,230,0) 62%),
+      radial-gradient(ellipse 700px 900px at 6% 90%, rgba(70,120,200,0.10) 0%, rgba(70,120,200,0) 60%),
+      radial-gradient(ellipse 700px 900px at 96% 10%, rgba(60,110,190,0.10) 0%, rgba(60,110,190,0) 60%),
+      linear-gradient(165deg,#0b1c33 0%,#102a48 34%,#123254 52%,#0c1e39 76%,#071223 100%)}
+  .grid-fine{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(150,195,240,0.055) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(150,195,240,0.055) 1px,transparent 1px);background-size:32px 32px}
+  .grid-bold{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(150,195,240,0.10) 1.5px,transparent 1.5px),
+    linear-gradient(90deg,rgba(150,195,240,0.10) 1.5px,transparent 1.5px);background-size:160px 160px}
+  .vig{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse 1500px 1000px at 50% 50%,rgba(0,0,0,0) 42%,rgba(0,0,0,0.62) 100%)}
+  svg{position:absolute;inset:0}
+  text{font-family:"Microsoft YaHei","微软雅黑",sans-serif}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="grid-fine"></div><div class="grid-bold"></div>
+  <svg id="svg" viewBox="0 0 1920 1080" width="1920" height="1080"></svg>
+  <div class="vig"></div>
+</div>
+<script>
+const clamp01=v=>v<0?0:v>1?1:v;
+const easeOut=p=>1-Math.pow(1-p,3);
+const easeInOut=p=>p<0.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const seg=(t,a,b)=>clamp01((t-a)/(b-a));
+function mkRng(s){let x=s>>>0;return()=>{x=(x*1664525+1013904223)>>>0;return x/4294967296;};}
+const rnd=mkRng(778291);
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("svg");
+const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const CY=470;
+
+// ── 左：三类文档卡片 ──
+const DOCX=320, DOCY=800;
+const docs=[];
+["PDF","PPT","Word"].forEach((lab,i)=>{
+  const g=el("g",{});
+  const w=200,h=250;
+  const rect=el("rect",{x:-w/2,y:-h/2,width:w,height:h,rx:12,fill:"rgba(14,32,56,0.9)",stroke:"rgba(150,195,240,0.55)","stroke-width":1.6});
+  const fold=el("path",{d:`M ${w/2-46} ${-h/2} L ${w/2} ${-h/2+46} L ${w/2-46} ${-h/2+46} Z`,fill:"rgba(150,195,240,0.28)"});
+  const t=el("text",{x:0,y:12,"text-anchor":"middle",fill:"#cfe4fa","font-size":34,"letter-spacing":4,"font-weight":600});
+  t.textContent=lab;
+  const l1=el("line",{x1:-62,y1:64,x2:62,y2:64,stroke:"rgba(170,205,240,0.42)","stroke-width":3});
+  const l2=el("line",{x1:-62,y1:88,x2:26,y2:88,stroke:"rgba(170,205,240,0.3)","stroke-width":3});
+  [rect,fold,t,l1,l2].forEach(e=>g.appendChild(e));
+  svg.appendChild(g);
+  docs.push({g,x:DOCX,y:DOCY-120+i*130,rot:(i-1)*7});
+});
+
+// ── 中：解析环 ──
+const PX=1000;
+const ringGlow=el("circle",{cx:PX,cy:CY,r:120,fill:"#7fb2e8",opacity:0,filter:"blur(30px)"});
+const ring=el("circle",{cx:PX,cy:CY,r:104,fill:"none",stroke:"rgba(150,195,240,0.65)","stroke-width":2,"stroke-dasharray":"16 12"});
+const ring2=el("circle",{cx:PX,cy:CY,r:76,fill:"rgba(12,28,50,0.7)",stroke:"rgba(232,196,116,0.55)","stroke-width":1.6});
+const ringT=el("text",{x:PX,y:CY+11,"text-anchor":"middle",fill:"#f2e2b6","font-size":26,"letter-spacing":4});
+ringT.textContent="解析";
+const scan=el("line",{x1:PX-118,y1:CY,x2:PX+118,y2:CY,stroke:"#f0c874","stroke-width":2.4,opacity:0});
+svg.appendChild(ringGlow);svg.appendChild(ring);svg.appendChild(ring2);svg.appendChild(ringT);svg.appendChild(scan);
+
+// ── 右：知识点 → 图谱 ──
+const GX=1520, GY=CY;
+const N=15;
+const nodes=[];
+for(let i=0;i<N;i++){
+  const a=(i/N)*Math.PI*2*1.0+i*0.42;
+  const rr=70+ (i%5)*46;
+  nodes.push({
+    x:GX+Math.cos(a)*rr*1.18,
+    y:GY+Math.sin(a)*rr*0.82,
+    r:6+((i*7)%4)*1.8,
+    hue:["#7fb2e8","#7fe0c8","#c9a0f0"][i%3],
+    sx:PX+(rnd()-0.5)*120,
+    sy:CY+(rnd()-0.5)*120,
+    d:rnd(),
+  });
+}
+const EDGES=[];const seen=new Set();
+nodes.forEach((n,i)=>nodes.forEach((m,j)=>{
+  if(i>=j)return;
+  const d=Math.hypot(n.x-m.x,n.y-m.y);
+  if(d>250)return;
+  const k=i+"-"+j;if(seen.has(k))return;seen.add(k);
+  EDGES.push({a:n,b:m,len:d,d:rnd()});
+}));
+const gEdge=el("g",{});svg.appendChild(gEdge);
+const edgeEls=EDGES.map(e=>{
+  const ln=el("line",{x1:e.a.x,y1:e.a.y,x2:e.b.x,y2:e.b.y,stroke:"#8fc4ea","stroke-width":1.1,opacity:0});
+  gEdge.appendChild(ln);return {ln,len:e.len,d:e.d};
+});
+const gNode=el("g",{});svg.appendChild(gNode);
+const nodeEls=nodes.map(n=>{
+  const halo=el("circle",{r:n.r*3,fill:n.hue,opacity:0,filter:"blur(6px)"});
+  const dot=el("circle",{r:n.r,fill:n.hue,opacity:0,stroke:"rgba(255,255,255,0.6)","stroke-width":1});
+  gNode.appendChild(halo);gNode.appendChild(dot);return {halo,dot};
+});
+
+function draw(t){
+  // 文档入场
+  docs.forEach((d,i)=>{
+    const a=easeOut(seg(t,0.05+i*0.12,0.7+i*0.12));
+    d.g.setAttribute("opacity",a.toFixed(3));
+    d.g.setAttribute("transform",`translate(${d.x},${d.y}) rotate(${(d.rot*(1-a)).toFixed(2)})`);
+  });
+  // 环启动
+  const ra=easeOut(seg(t,0.55,1.25));
+  ring.setAttribute("opacity",(ra*0.9).toFixed(3));
+  ring2.setAttribute("opacity",ra.toFixed(3));
+  ringT.setAttribute("opacity",ra.toFixed(3));
+  ringGlow.setAttribute("opacity",(ra*0.22).toFixed(3));
+  ring.setAttribute("transform",`rotate(${(t*46).toFixed(1)} ${PX} ${CY})`);
+  // 扫描线 1.0–2.1
+  const sa=seg(t,1.0,2.1);
+  scan.setAttribute("opacity",(sa<=0||sa>=1?0:0.9).toFixed(3));
+  scan.setAttribute("y1",CY-118+sa*236);scan.setAttribute("y2",CY-118+sa*236);
+  // 文档被吸入
+  const pull=easeInOut(seg(t,1.15,1.95));
+  docs.forEach((d,i)=>{
+    const x=d.x+(PX-d.x)*pull, y=d.y+(CY-d.y)*pull;
+    d.g.setAttribute("transform",`translate(${x.toFixed(1)},${y.toFixed(1)}) rotate(${(d.rot*(1-pull)).toFixed(2)}) scale(${(1-0.72*pull).toFixed(3)})`);
+    d.g.setAttribute("opacity",(1-easeInOut(seg(pull,0.75,1))*0.95).toFixed(3));
+  });
+  // 知识点迸发 → 力导向落位
+  nodes.forEach((n,i)=>{
+    const st=1.75+n.d*0.5+i*0.028;
+    const p=easeInOut(seg(t,st,st+1.5));
+    const x=n.sx+(n.x-n.sx)*p, y=n.sy+(n.y-n.sy)*p;
+    const e=nodeEls[i];
+    e.dot.setAttribute("cx",x.toFixed(2));e.dot.setAttribute("cy",y.toFixed(2));
+    e.halo.setAttribute("cx",x.toFixed(2));e.halo.setAttribute("cy",y.toFixed(2));
+    const o=easeOut(seg(t,1.7+i*0.03,2.25+i*0.03));
+    e.dot.setAttribute("opacity",o.toFixed(3));
+    e.halo.setAttribute("opacity",(o*0.2).toFixed(3));
+  });
+  // 连线
+  edgeEls.forEach(e=>{
+    const g=easeOut(seg(t,2.75+e.d*0.6,3.7+e.d*0.6));
+    e.ln.setAttribute("opacity",(g*0.7).toFixed(3));
+    e.ln.setAttribute("stroke-dasharray",e.len.toFixed(1));
+    e.ln.setAttribute("stroke-dashoffset",(e.len*(1-g)).toFixed(1));
+  });
+}
+window.__seek=t=>draw(t);
+window.__ready=true;
+window.__seek(0);
+</script>
+</body>
+</html>

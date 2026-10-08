@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:#04070e}
+  #stage{position:relative;width:1920px;height:1080px;overflow:hidden;
+    background:
+      radial-gradient(ellipse 1050px 720px at 50% 44%, rgba(90,150,230,0.17) 0%, rgba(90,150,230,0) 62%),
+      radial-gradient(ellipse 700px 900px at 96% 12%, rgba(60,110,190,0.10) 0%, rgba(60,110,190,0) 60%),
+      linear-gradient(165deg,#0b1c33 0%,#102a48 34%,#123254 52%,#0c1e39 76%,#071223 100%)}
+  .grid-fine{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(150,195,240,0.055) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(150,195,240,0.055) 1px,transparent 1px);background-size:32px 32px}
+  .grid-bold{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(150,195,240,0.10) 1.5px,transparent 1.5px),
+    linear-gradient(90deg,rgba(150,195,240,0.10) 1.5px,transparent 1.5px);background-size:160px 160px}
+  .vig{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse 1500px 1000px at 50% 50%,rgba(0,0,0,0) 42%,rgba(0,0,0,0.62) 100%)}
+  svg{position:absolute;inset:0}
+  text{font-family:"Microsoft YaHei","微软雅黑",sans-serif}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="grid-fine"></div><div class="grid-bold"></div>
+  <svg id="svg" viewBox="0 0 1920 1080" width="1920" height="1080"></svg>
+  <div class="vig"></div>
+</div>
+<script>
+const clamp01=v=>v<0?0:v>1?1:v;
+const easeOut=p=>1-Math.pow(1-p,3);
+const easeInOut=p=>p<0.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const seg=(t,a,b)=>clamp01((t-a)/(b-a));
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("svg");
+const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+
+// ── 左：掌握率环形图（示意结构，不标具体数值）──
+const RX=560, RY=500, RR=158, SW=36;
+const C=2*Math.PI*RR;
+const SEGS=[
+  {f:0.46,c:"#e6bd63",label:"已掌握"},
+  {f:0.24,c:"#7fe0c8",label:"待巩固"},
+  {f:0.30,c:"rgba(140,180,220,0.34)",label:"未学习"},
+];
+svg.appendChild(el("circle",{cx:RX,cy:RY,r:RR,fill:"none",stroke:"rgba(120,170,220,0.16)","stroke-width":SW}));
+const rg=el("g",{transform:`rotate(-90 ${RX} ${RY})`});svg.appendChild(rg);
+let acc=0;
+const segEls=SEGS.map(s=>{
+  const len=s.f*C;
+  const arc=el("circle",{cx:RX,cy:RY,r:RR,fill:"none",stroke:s.c,"stroke-width":SW,
+    "stroke-dasharray":`0 ${C}`,"stroke-dashoffset":(-acc).toFixed(2),"stroke-linecap":"butt"});
+  rg.appendChild(arc);
+  const o={arc,len,acc,f:s.f,c:s.c,label:s.label};
+  acc+=len;
+  return o;
+});
+// 中心文字
+const ringTitle=el("text",{x:RX,y:RY-6,"text-anchor":"middle",fill:"#eaf3ff","font-size":30,"letter-spacing":6});
+ringTitle.textContent="掌握状态";
+const ringSub=el("text",{x:RX,y:RY+40,"text-anchor":"middle",fill:"rgba(178,206,238,0.82)","font-size":21,"letter-spacing":4});
+ringSub.textContent="已掌握 / 待巩固";
+svg.appendChild(ringTitle);svg.appendChild(ringSub);
+// 图例
+const gLeg=el("g",{opacity:0});svg.appendChild(gLeg);
+SEGS.forEach((s,i)=>{
+  const y=760+i*44;
+  gLeg.appendChild(el("rect",{x:RX-190,y:y-11,width:22,height:22,rx:5,fill:s.c}));
+  const t=el("text",{x:RX-154,y:y+7,fill:"rgba(206,224,246,0.9)","font-size":22,"letter-spacing":4});
+  t.textContent=s.label;
+  gLeg.appendChild(t);
+});
+
+// ── 右：学习足迹柱状（示意结构）──
+const BX=1090, BY=760, BW=64, GAP=34, N=7;
+const HEIGHTS=[0.42,0.66,0.35,0.86,0.58,0.74,0.50];
+const gBar=el("g",{});svg.appendChild(gBar);
+const barEls=HEIGHTS.map((h,i)=>{
+  const x=BX+i*(BW+GAP);
+  const track=el("rect",{x,y:BY-300,width:BW,height:300,rx:8,fill:"rgba(120,170,220,0.10)"});
+  const bar=el("rect",{x,y:BY,width:BW,height:0,rx:8,fill:"url(#bg1)",opacity:0.95});
+  gBar.appendChild(track);gBar.appendChild(bar);
+  return {bar,h,x};
+});
+const defs=el("defs",{});
+const lg=el("linearGradient",{id:"bg1",x1:"0",y1:"0",x2:"0",y2:"1"});
+lg.appendChild(el("stop",{offset:"0%","stop-color":"#f0c874"}));
+lg.appendChild(el("stop",{offset:"100%","stop-color":"rgba(230,189,99,0.35)"}));
+defs.appendChild(lg);svg.appendChild(defs);
+// 基线 + 标题
+svg.appendChild(el("line",{x1:BX-30,y1:BY+2,x2:BX+N*(BW+GAP)+10,y2:BY+2,stroke:"rgba(150,195,240,0.4)","stroke-width":1.6}));
+const barTitle=el("text",{x:BX-30,y:BY-340,fill:"#eaf3ff","font-size":28,"letter-spacing":6});
+barTitle.textContent="学习足迹";
+const barSub=el("text",{x:BX-30,y:BY-300,fill:"rgba(178,206,238,0.8)","font-size":20,"letter-spacing":3});
+barSub.textContent="按知识点记录学习行为";
+svg.appendChild(barTitle);svg.appendChild(barSub);
+
+// ── 顶部小标题 ──
+const cap=el("text",{x:960,y:186,"text-anchor":"middle",fill:"rgba(232,196,116,0.95)","font-size":26,"letter-spacing":12});
+cap.textContent="学习数据可量化";
+svg.appendChild(cap);
+
+function draw(t){
+  // 环形依次扫描
+  segEls.forEach((s,i)=>{
+    const st=0.55+i*0.52;
+    const p=easeOut(seg(t,st,st+0.72));
+    s.arc.setAttribute("stroke-dasharray",`${(s.len*p).toFixed(2)} ${C}`);
+    s.arc.setAttribute("stroke-dashoffset",(-s.acc).toFixed(2));
+  });
+  ringTitle.setAttribute("opacity",(easeOut(seg(t,0.25,0.9))).toFixed(3));
+  ringSub.setAttribute("opacity",(easeOut(seg(t,1.1,1.8))*0.95).toFixed(3));
+  gLeg.setAttribute("opacity",(easeOut(seg(t,2.15,2.85))).toFixed(3));
+  // 柱状生长
+  barEls.forEach((b,i)=>{
+    const st=1.5+i*0.11;
+    const p=easeOut(seg(t,st,st+0.62));
+    const h=b.h*300*p;
+    b.bar.setAttribute("y",(BY-h).toFixed(1));
+    b.bar.setAttribute("height",h.toFixed(1));
+  });
+  barTitle.setAttribute("opacity",(easeOut(seg(t,0.45,1.1))).toFixed(3));
+  barSub.setAttribute("opacity",(easeOut(seg(t,1.25,1.95))*0.9).toFixed(3));
+  cap.setAttribute("opacity",(easeOut(seg(t,0.15,0.8))*0.95).toFixed(3));
+}
+window.__seek=t=>draw(t);
+window.__ready=true;
+window.__seek(0);
+</script>
+</body>
+</html>

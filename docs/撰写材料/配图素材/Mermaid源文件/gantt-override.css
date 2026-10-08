@@ -1,0 +1,6 @@
+.today {
+  display: none !important;
+  stroke: none !important;
+  stroke-width: 0 !important;
+  opacity: 0 !important;
+}

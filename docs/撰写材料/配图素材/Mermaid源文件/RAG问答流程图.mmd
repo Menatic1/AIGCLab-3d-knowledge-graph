@@ -1,0 +1,11 @@
+flowchart LR
+    A[1️⃣ 问题接收<br/>学生提问输入] --> B[2️⃣ 检索召回<br/>关键词匹配 + 语义相似度<br/>Top-K 知识点召回]
+    B --> C[3️⃣ 上下文注入<br/>召回知识点组织为上下文<br/>组装提示词 Prompt]
+    C --> D[4️⃣ 答案生成<br/>LLM 大模型回答<br/>引用知识点标记]
+    D --> E[5️⃣ 节点关联溯源<br/>回答与图谱节点匹配<br/>前端高亮关联节点]
+    
+    style A fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style B fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+    style C fill:#fef3c7,stroke:#d97706,stroke-width:2px
+    style D fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style E fill:#fce7f3,stroke:#db2777,stroke-width:2px

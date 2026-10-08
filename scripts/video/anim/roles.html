@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:#04070e}
+  #stage{position:relative;width:1920px;height:1080px;overflow:hidden;
+    background:
+      radial-gradient(ellipse 1050px 720px at 50% 44%, rgba(90,150,230,0.17) 0%, rgba(90,150,230,0) 62%),
+      radial-gradient(ellipse 700px 900px at 6% 90%, rgba(70,120,200,0.10) 0%, rgba(70,120,200,0) 60%),
+      radial-gradient(ellipse 700px 900px at 96% 10%, rgba(60,110,190,0.10) 0%, rgba(60,110,190,0) 60%),
+      linear-gradient(165deg,#0b1c33 0%,#102a48 34%,#123254 52%,#0c1e39 76%,#071223 100%)}
+  .grid-fine{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(150,195,240,0.055) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(150,195,240,0.055) 1px,transparent 1px);background-size:32px 32px}
+  .grid-bold{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(150,195,240,0.10) 1.5px,transparent 1.5px),
+    linear-gradient(90deg,rgba(150,195,240,0.10) 1.5px,transparent 1.5px);background-size:160px 160px}
+  .vig{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse 1500px 1000px at 50% 50%,rgba(0,0,0,0) 42%,rgba(0,0,0,0.62) 100%)}
+  svg{position:absolute;inset:0}
+  text{font-family:"Microsoft YaHei","微软雅黑",sans-serif}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="grid-fine"></div><div class="grid-bold"></div>
+  <svg id="svg" viewBox="0 0 1920 1080" width="1920" height="1080"></svg>
+  <div class="vig"></div>
+</div>
+<script>
+const clamp01=v=>v<0?0:v>1?1:v;
+const easeOut=p=>1-Math.pow(1-p,3);
+const easeInOut=p=>p<0.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+const seg=(t,a,b)=>clamp01((t-a)/(b-a));
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("svg");
+const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+
+const CX=960, CY=458;
+// 系统卡片
+const sysG=el("g",{});
+const sysGlow=el("rect",{x:CX-150,y:CY-84,width:300,height:168,rx:18,fill:"#f0c874",opacity:0,"filter":"blur(22px)"});
+const sysRect=el("rect",{x:CX-150,y:CY-84,width:300,height:168,rx:18,fill:"rgba(12,28,50,0.92)",stroke:"#e6bd63","stroke-width":2});
+const sysMark=el("circle",{cx:CX,cy:CY-18,r:11,fill:"#f0c874"});
+const sysT=el("text",{x:CX,y:CY+44,"text-anchor":"middle",fill:"#f2e2b6","font-size":30,"letter-spacing":6,"font-weight":500});
+sysT.textContent="智绘千里";
+sysG.appendChild(sysGlow);sysG.appendChild(sysRect);sysG.appendChild(sysMark);sysG.appendChild(sysT);
+
+// 隔离线
+const divLine=el("line",{x1:CX,y1:212,x2:CX,y2:742,stroke:"rgba(232,196,116,0.55)","stroke-width":1.6,"stroke-dasharray":"9 9"});
+const divDia=el("rect",{x:CX-8,y:CY-8,width:16,height:16,fill:"#e6bd116",opacity:0});
+divDia.setAttribute("fill","#e6c474");
+divDia.setAttribute("transform",`rotate(45 ${CX} ${CY})`);
+
+// 两个角色面板
+function panel(dir){
+  const g=el("g",{});
+  const W=430,H=290;
+  const x=dir<0?CX-560:CX+130, y=CY-H/2-10;
+  const rect=el("rect",{x,y,width:W,height:H,rx:16,fill:"rgba(14,32,56,0.86)",stroke:"rgba(140,190,235,0.5)","stroke-width":1.6});
+  const bar=el("rect",{x:x+26,y:y+26,width:74,height:74,rx:14,fill:dir<0?"rgba(240,200,116,0.18)":"rgba(127,224,200,0.18)",stroke:dir<0?"#e6bd63":"#7fe0c8","stroke-width":1.6});
+  const ico=el("circle",{cx:x+63,cy:y+63,r:17,fill:dir<0?"#e6bd63":"#7fe0c8",opacity:0.9});
+  const t1=el("text",{x:x+124,y:y+68,fill:"#eaf3ff","font-size":34,"letter-spacing":5,"font-weight":600});
+  t1.textContent=dir<0?"教师端":"学生端";
+  const t2=el("text",{x:x+124,y:y+108,fill:"rgba(178,206,238,0.85)","font-size":21,"letter-spacing":3});
+  t2.textContent=dir<0?"建设知识图谱":"沿图谱学习";
+  const rows=[];
+  for(let i=0;i<3;i++){
+    const r=el("rect",{x:x+30,y:y+152+i*38,width:W-60-(i*54),height:9,rx:4.5,
+      fill:dir<0?"rgba(214,170,84,0.45)":"rgba(127,224,200,0.42)"});
+    rows.push(r);
+  }
+  [rect,bar,ico,t1,t2,...rows].forEach(e=>g.appendChild(e));
+  return {g,rect,bar,ico,t1,t2,rows,x,y,W,H};
+}
+const L=panel(-1),R=panel(1);
+svg.appendChild(sysG);svg.appendChild(L.g);svg.appendChild(R.g);svg.appendChild(divLine);svg.appendChild(divDia);
+
+// 顶部小标题
+const cap=el("text",{x:CX,y:168,"text-anchor":"middle",fill:"rgba(206,224,246,0.92)","font-size":26,"letter-spacing":12});
+cap.textContent="一套系统 · 两种角色";
+svg.appendChild(cap);
+// 底部标签
+const foot=el("text",{x:CX,y:820,"text-anchor":"middle",fill:"rgba(232,196,116,0.9)","font-size":24,"letter-spacing":10});
+foot.textContent="权限完全隔离";
+svg.appendChild(foot);
+
+function draw(t){
+  const a0=easeOut(seg(t,0.05,0.85));
+  sysG.setAttribute("opacity",a0.toFixed(3));
+  sysG.setAttribute("transform",`translate(0,${((1-a0)*18).toFixed(2)})`);
+  sysGlow.setAttribute("opacity",(0.10+0.07*Math.sin(t*2.2)).toFixed(3));
+
+  const a1=easeOut(seg(t,0.72,1.62));
+  [L,R].forEach((p,i)=>{
+    const dir=i===0?-1:1;
+    p.g.setAttribute("opacity",a1.toFixed(3));
+    p.g.setAttribute("transform",`translate(${(dir*(1-a1)*90).toFixed(1)},0)`);
+    p.rows.forEach((r,k)=>{
+      const ra=easeOut(seg(t,1.35+k*0.14+i*0.06,2.0+k*0.14+i*0.06));
+      r.setAttribute("width",((p.W-60-(k*54))*ra).toFixed(1));
+    });
+  });
+
+  const a2=seg(t,1.55,2.35);
+  divLine.setAttribute("stroke-dashoffset",((1-easeOut(a2))*530).toFixed(1));
+  divLine.setAttribute("opacity",(0.25+0.75*a2).toFixed(3));
+  divDia.setAttribute("opacity",(easeOut(seg(t,2.0,2.5))*0.95).toFixed(3));
+
+  cap.setAttribute("opacity",(easeOut(seg(t,0.25,0.9))*0.9).toFixed(3));
+  foot.setAttribute("opacity",(easeOut(seg(t,2.15,2.9))*0.95).toFixed(3));
+}
+window.__seek=t=>draw(t);
+window.__ready=true;
+window.__seek(0);
+</script>
+</body>
+</html>

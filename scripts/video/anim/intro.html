@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #04070e; }
+
+  #stage {
+    position: relative; width: 1920px; height: 1080px; overflow: hidden;
+    background:
+      radial-gradient(ellipse 1000px 700px at 50% 42%, rgba(90,150,230,0.16) 0%, rgba(90,150,230,0) 62%),
+      radial-gradient(ellipse 700px 900px at 8% 88%, rgba(70,120,200,0.10) 0%, rgba(70,120,200,0) 60%),
+      radial-gradient(ellipse 700px 900px at 94% 12%, rgba(60,110,190,0.10) 0%, rgba(60,110,190,0) 60%),
+      linear-gradient(165deg, #0b1c33 0%, #102a48 34%, #123254 52%, #0c1e39 76%, #071223 100%);
+  }
+
+  .grid-fine {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(150,195,240,0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(150,195,240,0.055) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .grid-bold {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(150,195,240,0.10) 1.5px, transparent 1.5px),
+      linear-gradient(90deg, rgba(150,195,240,0.10) 1.5px, transparent 1.5px);
+    background-size: 160px 160px;
+  }
+  .grid-mask {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 1250px 1050px at 50% 46%, rgba(8,18,36,0.62) 0%, rgba(8,18,36,0) 58%);
+  }
+
+  canvas { position: absolute; inset: 0; }
+
+  /* 暗角 */
+  .vig {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 1500px 1000px at 50% 50%, rgba(0,0,0,0) 42%, rgba(0,0,0,0.62) 100%);
+  }
+  .grain {
+    position: absolute; inset: 0; opacity: 0.5; mix-blend-mode: overlay; pointer-events: none;
+    background-image:
+      radial-gradient(circle at 9% 17%, rgba(255,255,255,0.06) 0 1.5px, transparent 2.5px),
+      radial-gradient(circle at 74% 9%, rgba(255,255,255,0.05) 0 1.5px, transparent 2.5px),
+      radial-gradient(circle at 31% 71%, rgba(0,0,0,0.07) 0 2px, transparent 3px),
+      radial-gradient(circle at 86% 64%, rgba(0,0,0,0.06) 0 2px, transparent 3px),
+      radial-gradient(circle at 52% 34%, rgba(255,255,255,0.04) 0 1px, transparent 2px),
+      radial-gradient(circle at 64% 86%, rgba(0,0,0,0.05) 0 1.5px, transparent 2.5px),
+      radial-gradient(circle at 17% 90%, rgba(255,255,255,0.03) 0 1px, transparent 2px);
+  }
+
+  /* ═════ 标题 ═════ */
+  .title-wrap {
+    position: absolute; left: 0; right: 0; top: 372px;
+    display: flex; flex-direction: column; align-items: center;
+    opacity: 0;
+  }
+  .title {
+    font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+    font-size: 138px; font-weight: 800; letter-spacing: 30px;
+    padding-left: 30px; line-height: 1;
+    background: linear-gradient(180deg, #fffaea 0%, #f7e0a0 26%, #e6bd63 48%, #c99a3c 66%, #a8792a 82%, #ffeec4 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.6)) drop-shadow(0 0 42px rgba(214,170,84,0.42));
+  }
+  .rule {
+    margin-top: 26px; width: 0px; height: 2px;
+    background: linear-gradient(90deg, rgba(214,170,84,0) 0%, rgba(230,190,110,0.95) 50%, rgba(214,170,84,0) 100%);
+  }
+  .sub {
+    margin-top: 24px;
+    font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+    font-size: 30px; font-weight: 300; letter-spacing: 12px; padding-left: 12px;
+    color: rgba(206,224,246,0.92);
+    text-shadow: 0 3px 14px rgba(0,0,0,0.7);
+    opacity: 0;
+  }
+  .tag {
+    margin-top: 16px;
+    font-family: "Times New Roman", serif;
+    font-size: 15px; letter-spacing: 6px;
+    color: rgba(214,170,84,0.62);
+    opacity: 0;
+  }
+
+  /* 四角工程角标 */
+  .corner { position: absolute; width: 54px; height: 54px; opacity: 0.5; }
+  .corner::before, .corner::after { content: ''; position: absolute; background: rgba(214,170,84,0.5); }
+  .corner::before { width: 54px; height: 1.5px; }
+  .corner::after { width: 1.5px; height: 54px; }
+  .c-tl { top: 48px; left: 48px; }
+  .c-tr { top: 48px; right: 48px; transform: scaleX(-1); }
+  .c-bl { bottom: 48px; left: 48px; transform: scaleY(-1); }
+  .c-br { bottom: 48px; right: 48px; transform: scale(-1,-1); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="grid-fine"></div>
+  <div class="grid-bold"></div>
+  <div class="grid-mask"></div>
+  <canvas id="g" width="1920" height="1080"></canvas>
+  <div class="vig"></div>
+
+  <div class="corner c-tl"></div>
+  <div class="corner c-tr"></div>
+  <div class="corner c-bl"></div>
+  <div class="corner c-br"></div>
+
+  <div class="title-wrap" id="tw">
+    <div class="title" id="title">智绘千里</div>
+    <div class="rule" id="rule"></div>
+    <div class="sub" id="sub">AIGC 知识图谱智能导学系统</div>
+    <div class="tag" id="tag">KNOWLEDGE GRAPH · INTELLIGENT TUTORING SYSTEM</div>
+  </div>
+
+  <div class="grain"></div>
+</div>
+
+<script>
+// ══════════ 确定性随机 ══════════
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rnd = mulberry32(20251008);
+const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+const easeOut = p => 1 - Math.pow(1 - p, 3);
+const easeInOut = p => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const seg = (t, a, b) => clamp01((t - a) / (b - a));
+
+// ══════════ 构图：分层放射知识网络 ══════════
+const CX = 960, CY = 528;
+const RINGS = [
+  { r: 0,   n: 1,  size: 15 },
+  { r: 178, n: 6,  size: 10.5 },
+  { r: 342, n: 12, size: 8.2 },
+  { r: 500, n: 17, size: 6.4 },
+];
+
+const nodes = [];
+const edges = [];
+
+RINGS.forEach((ring, li) => {
+  for (let i = 0; i < ring.n; i++) {
+    let x, y;
+    if (li === 0) { x = CX; y = CY; }
+    else {
+      const base = (i / ring.n) * Math.PI * 2 + li * 0.55;
+      const jr = ring.r * (0.88 + rnd() * 0.24);
+      const ja = base + (rnd() - 0.5) * 0.30;
+      x = CX + Math.cos(ja) * jr;
+      y = CY + Math.sin(ja) * jr * 0.80;   // 椭圆压扁，贴合 16:9
+    }
+    nodes.push({
+      x, y, li, i,
+      size: ring.size * (0.85 + rnd() * 0.3),
+      delay: li === 0 ? 0.35 : 0.55 + li * 0.42 + rnd() * 0.34,
+      hue: li === 0 ? 'gold' : li === 1 ? 'cyan' : 'blue',
+      tw: rnd() * Math.PI * 2,
+    });
+  }
+});
+
+// 索引分层
+const layerIdx = [];
+let cursor = 0;
+RINGS.forEach(r => { layerIdx.push(nodes.slice(cursor, cursor + r.n)); cursor += r.n; });
+
+// 边：中心→环1；环1→环2（就近）；环2→环3（就近）；少量跨环
+layerIdx[0].forEach(c => layerIdx[1].forEach(n => edges.push([c, n, 0.55])));
+layerIdx[1].forEach(n1 => {
+  const near = layerIdx[2].slice().sort((a, b) => Math.hypot(a.x - n1.x, a.y - n1.y) - Math.hypot(b.x - n1.x, b.y - n1.y));
+  near.slice(0, 2).forEach(n2 => edges.push([n1, n2, 0.8]));
+});
+layerIdx[2].forEach(n2 => {
+  const near = layerIdx[3].slice().sort((a, b) => Math.hypot(a.x - n2.x, a.y - n2.y) - Math.hypot(b.x - n2.x, b.y - n2.y));
+  near.slice(0, 1).forEach(n3 => edges.push([n2, n3, 1.05]));
+});
+// 跨环关联边
+for (let k = 0; k < 7; k++) {
+  const a = layerIdx[1 + (k % 2)][Math.floor(rnd() * layerIdx[1 + (k % 2)].length)];
+  const b = layerIdx[2 + (k % 2)][Math.floor(rnd() * layerIdx[2 + (k % 2)].length)];
+  if (a !== b) edges.push([a, b, 1.2]);
+}
+
+// 背景散点（远景模糊层）
+const dust = Array.from({ length: 90 }, () => ({
+  x: rnd() * 1920, y: rnd() * 1080,
+  r: 0.6 + rnd() * 1.6,
+  a: 0.06 + rnd() * 0.22,
+  ph: rnd() * Math.PI * 2,
+}));
+
+const cv = document.getElementById('g');
+const ctx = cv.getContext('2d');
+
+const COL = {
+  gold:  { core: '#ffe9ac', mid: '#e8c069', glow: 'rgba(232,192,105,' },
+  cyan:  { core: '#d6f4ff', mid: '#79c8e8', glow: 'rgba(121,200,232,' },
+  blue:  { core: '#cfe2ff', mid: '#6f9fd8', glow: 'rgba(111,159,216,' },
+};
+
+// ══════════ 主绘制 ══════════
+const T_END = 8.0;
+
+function draw(t) {
+  ctx.clearRect(0, 0, 1920, 1080);
+
+  const intro = seg(t, 0, 0.5);              // 全局淡入
+  const dissolve = seg(t, 6.55, 8.0);        // 结尾扩散溶解
+  const dOut = easeOut(dissolve);
+  const globalAlpha = intro * (1 - dOut * 0.92);
+  const scale = 1 + dOut * 0.16;
+
+  ctx.save();
+  ctx.globalAlpha = globalAlpha;
+  ctx.translate(CX, CY);
+  ctx.scale(scale, scale);
+  ctx.translate(-CX, -CY);
+
+  // ── 远景尘点 ──
+  dust.forEach(d => {
+    const tw = 0.55 + 0.45 * Math.sin(t * 1.5 + d.ph);
+    ctx.beginPath();
+    ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(160,200,240,${(d.a * tw * intro).toFixed(3)})`;
+    ctx.fill();
+  });
+
+  // ── 中心脉冲冲击波（2.5s 起向外扩散）──
+  for (let k = 0; k < 3; k++) {
+    const s = seg(t, 2.45 + k * 0.55, 5.4 + k * 0.55);
+    if (s <= 0 || s >= 1) continue;
+    const rr = 60 + easeOut(s) * 620;
+    ctx.beginPath();
+    ctx.arc(CX, CY, rr, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(214,170,84,${(0.34 * (1 - s)).toFixed(3)})`;
+    ctx.lineWidth = 2.2 * (1 - s) + 0.5;
+    ctx.stroke();
+  }
+
+  // ── 边 ──
+  edges.forEach(([a, b, dly]) => {
+    const pa = seg(t, a.delay + 0.06, a.delay + 0.85);
+    const pb = seg(t, b.delay + 0.06, b.delay + 0.85);
+    const p = Math.min(pa, pb);
+    if (p <= 0) return;
+    const ep = easeOut(p);
+
+    // 贝塞尔：垂直方向加弧
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const bow = Math.min(58, len * 0.17);
+    const nx = -dy / len, ny = dx / len;
+    const qx = mx + nx * bow, qy = my + ny * bow;
+
+    const ex = a.x + (b.x - a.x) * ep, ey = a.y + (b.y - a.y) * ep;
+    const qx2 = a.x + (qx - a.x) * ep, qy2 = a.y + (qy - a.y) * ep;
+
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.quadraticCurveTo(qx2, qy2, ex, ey);
+    const g = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+    const c1 = COL[a.hue], c2 = COL[b.hue];
+    g.addColorStop(0, c1.glow + (0.40 * ep).toFixed(3) + ')');
+    g.addColorStop(1, c2.glow + (0.40 * ep).toFixed(3) + ')');
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 1.15;
+    ctx.stroke();
+
+    // 行进光点
+    if (p > 0.35 && p < 1) {
+      ctx.beginPath();
+      ctx.arc(ex, ey, 2.4, 0, Math.PI * 2);
+      ctx.fillStyle = c2.glow + (0.85 * (1 - Math.abs(p - 0.5) * 1.2)).toFixed(3) + ')';
+      ctx.fill();
+    }
+  });
+
+  // ── 节点 ──
+  nodes.forEach(n => {
+    const on = seg(t, n.delay, n.delay + 0.5);
+    const e = easeOut(on);
+    if (e <= 0) return;
+
+    const breathe = 1 + 0.06 * Math.sin(t * 2.1 + n.tw);
+    const r = n.size * (0.55 + 0.45 * e) * breathe;
+    const c = COL[n.hue];
+
+    // 点亮脉冲环
+    const pr = seg(t, n.delay, n.delay + 0.95);
+    if (pr > 0 && pr < 1) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r + easeOut(pr) * 34, 0, Math.PI * 2);
+      ctx.strokeStyle = c.glow + (0.5 * (1 - pr)).toFixed(3) + ')';
+      ctx.lineWidth = 1.8 * (1 - pr) + 0.4;
+      ctx.stroke();
+    }
+
+    // 外光晕
+    const gl = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, r * 5.2);
+    gl.addColorStop(0, c.glow + (0.55 * e).toFixed(3) + ')');
+    gl.addColorStop(0.45, c.glow + (0.17 * e).toFixed(3) + ')');
+    gl.addColorStop(1, c.glow + '0)');
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r * 5.2, 0, Math.PI * 2);
+    ctx.fillStyle = gl;
+    ctx.fill();
+
+    // 核心
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+    const cg = ctx.createRadialGradient(n.x - r * 0.3, n.y - r * 0.35, r * 0.1, n.x, n.y, r);
+    cg.addColorStop(0, '#ffffff');
+    cg.addColorStop(0.45, c.core);
+    cg.addColorStop(1, c.mid);
+    ctx.fillStyle = cg;
+    ctx.globalAlpha = globalAlpha * e;
+    ctx.fill();
+    ctx.globalAlpha = globalAlpha;
+
+    // 高光圈
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r * 0.98, 0, Math.PI * 2);
+    ctx.strokeStyle = c.glow + (0.7 * e).toFixed(3) + ')';
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+  });
+
+  ctx.restore();
+}
+
+// ══════════ DOM 时间轴 ══════════
+const tw = document.getElementById('tw');
+const rule = document.getElementById('rule');
+const sub = document.getElementById('sub');
+const tag = document.getElementById('tag');
+
+function drawDom(t) {
+  const a = seg(t, 2.95, 4.05);
+  tw.style.opacity = easeOut(a).toFixed(3);
+  tw.style.transform = `translateY(${((1 - easeOut(a)) * 26).toFixed(1)}px)`;
+
+  const ra = easeInOut(seg(t, 3.45, 4.35));
+  rule.style.width = (ra * 660).toFixed(1) + 'px';
+
+  const sa = seg(t, 4.05, 4.95);
+  sub.style.opacity = easeOut(sa).toFixed(3);
+  sub.style.transform = `translateY(${((1 - easeOut(sa)) * 14).toFixed(1)}px)`;
+
+  tag.style.opacity = (seg(t, 4.45, 5.3) * 0.9).toFixed(3);
+
+  // 结尾标题随之淡出
+  const dOut = easeOut(seg(t, 6.55, 7.9));
+  tw.style.opacity = (easeOut(a) * (1 - dOut)).toFixed(3);
+}
+
+// ══════════ 逐帧接口 ══════════
+window.__seek = function (t) {
+  draw(t);
+  drawDom(t);
+};
+window.__ready = true;
+window.__seek(0);
+</script>
+</body>
+</html>

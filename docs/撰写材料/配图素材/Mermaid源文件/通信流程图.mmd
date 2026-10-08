@@ -1,0 +1,16 @@
+flowchart LR
+    A[用户浏览器<br/>Browser] -->|1. HTTP 请求<br/>Request| B[FastAPI 服务器]
+    B -->|2. 路由解析<br/>Route| C[业务处理逻辑]
+    C -->|3. 数据查询| D[(SQLite 数据库)]
+    C -->|4. AI 调用| E[大模型 LLM API]
+    D -->|返回数据| C
+    E -->|返回结果| C
+    C -->|5. JSON 响应<br/>Response| F[前端 React 渲染]
+    F -->|展示结果| A
+    
+    style A fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e40af
+    style B fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#166534
+    style C fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#92400e
+    style D fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#5b21b6
+    style E fill:#fce7f3,stroke:#db2777,stroke-width:2px,color:#9d174d
+    style F fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e40af

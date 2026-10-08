@@ -306,14 +306,14 @@ _EXTRACT_PROMPT = """你是一名专业的知识图谱构建助手。请根据�
 1. 节点必须有 name（知识点名称）、category（类别：从 [基础概念,核心概念,协议,算法,设备,应用] 中选一个最贴近的）、description（1-2 句话简介）、difficulty（1-5 数字，越大越难）。
 2. 关系必须说明关系类型 type（例如：先修 / 属于 / 包含 / 基于 / 依赖 / 协同 / 服务于 / 上层 / 关联，若都不合适则"关联"）和 label（对人类可读的简短描述）。
 3. 关系的方向：先修关系中，source 是被依赖的（先修）知识点，target 是后续知识点；包含关系中 source 是父节点，target 是子节点。
-4. 只输出 JSON，不要任何解释。JSON 结构严格为：
+4. 【数量要求】对于一门完整课程的章节内容，必须抽取不少于 20 个知识点节点，并建立不少于 15 条关系；即使文本较短，也尽量覆盖核心概念、子主题、关键方法/算法、典型应用等维度，至少抽取 10 个节点、5 条关系。
+5. 只输出 JSON，不要任何解释。JSON 结构严格为：
 {
   "nodes": [{"id": "请省略此字段，后端会自动生成稳定id", "name": "...", "category": "...", "description": "...", "difficulty": 3}],
   "relations": [{"id": "同样省略", "source_node_name": "...", "target_node_name": "...", "type": "...", "label": "..."}],
   "summary": "一句话说明抽取出的规模"
 }
-请不要在 nodes/relations 中写 id 字段；在 relations 里请写 source_node_name / target_node_name（即节点名）而不是编号。
-如果文本很短或信息不足，也请至少抽取出 3 个节点、1 条关系作为最小可用图谱。"""
+请不要在 nodes/relations 中写 id 字段；在 relations 里请写 source_node_name / target_node_name（即节点名）而不是编号。"""
 
 
 async def extract_knowledge_graph(text: str, max_chars: int = 12000) -> ExtractResult:
@@ -401,14 +401,14 @@ async def extract_knowledge_graph(text: str, max_chars: int = 12000) -> ExtractR
 
 # ---------------- RAG 问答 ----------------
 _QA_PROMPT = """你是《计算机网络》或相关 AIGC 课程的助教，回答需要基于给定的"知识点上下文"。
-上下文（JSON）：
+上下文（每个知识点已编号，引用时用 [编号] 标注）：
 __CONTEXT__
 
 用户问题：
 __QUESTION__
 
 要求：
-1. 回答要分三段：① 直接答案（2-3 句）② 知识点依据（引用上下文中的节点名和类别）③ 建议进一步学习的 1-3 个相关知识点。
+1. 回答要分三段：① 直接答案（2-3 句，引用知识点时在对应位置标注 [编号]）② 知识点依据（逐条列出引用到的知识点：[编号] 节点名 [类别]：描述）③ 建议进一步学习的 1-3 个相关知识点。
 2. 如果上下文完全无关，诚实说明"当前知识库未覆盖该问题"。
 3. 只输出 JSON：{"answer": "三段合并成 Markdown 字符串"}。"""
 
@@ -487,11 +487,11 @@ async def answer_question(
         answer = _answer_offline(question, related)
         return answer, related, False
 
-    # 构造上下文
+    # 构造上下文（带编号，便于引用标注）
     ctx = [
-        {"id": n.id, "name": n.name, "category": n.category,
+        {"idx": i + 1, "id": n.id, "name": n.name, "category": n.category,
          "description": (n.description or "")[:300], "difficulty": n.difficulty}
-        for n in related
+        for i, n in enumerate(related)
     ]
     if not ctx:
         return (
@@ -523,11 +523,11 @@ def _answer_offline(question: str, related: list[Any]) -> str:
     head = related[:3]
     lines = [
         f"### 直接答案\n根据当前知识图谱，与「{question}」最相关的知识点是："
-        + "、".join(f"**{n.name}**（{n.category}）" for n in head) + "。\n",
+        + "、".join(f"**{n.name}**[{i+1}]" for i, n in enumerate(head)) + "。\n",
         "### 知识点依据",
     ]
-    for n in head:
-        lines.append(f"- **{n.name}** [{n.category}]：{n.description or '暂无描述'}")
+    for i, n in enumerate(head):
+        lines.append(f"- [{i+1}] **{n.name}** [{n.category}]：{n.description or '暂无描述'}")
     rest = related[3:6]
     if rest:
         lines.append("\n### 建议进一步学习")
@@ -739,333 +739,3 @@ async def suggest_learning_resources(
         "summary": str(data.get("summary") or ""),
         "used_llm": True,
     }
-
-
-# ====================================================================
-# ==================== AI 实时互动讲题老师 ============================
-# ====================================================================
-
-# ---------- 多模态 Vision 调用（doubao-seed-2-1-pro 支持图片）----------
-async def _chat_completion_vision(
-    text_prompt: str,
-    image_b64: str | None = None,
-    image_media_type: str = "image/png",
-    *,
-    temperature: float = 0.3,
-    want_json: bool = True,
-) -> str:
-    """调用多模态 LLM：文字 prompt + 可选图片（base64）。
-    走 /responses API（doubao-seed-2 系列官方推荐），content 用 input_text + input_image。"""
-    if not _llm_available():
-        raise RuntimeError("未配置 LLM_API_KEY，无法进行多模态识别。")
-
-    base = settings.LLM_BASE_URL.rstrip("/")
-    chosen_model = settings.LLM_MODEL
-    headers = {"Authorization": f"Bearer {settings.LLM_API_KEY}", "Content-Type": "application/json"}
-    proxy = _resolve_proxy()
-
-    content: list[dict[str, Any]] = []
-    if image_b64:
-        content.append({
-            "type": "input_image",
-            "image_url": {"url": f"data:{image_media_type};base64,{image_b64}"},
-        })
-    prompt_text = text_prompt
-    if want_json:
-        prompt_text = "【重要】你必须严格输出合法的 JSON，禁止输出 JSON 之外的任何文字。\n" + prompt_text
-    content.append({"type": "input_text", "text": prompt_text})
-
-    payload: dict[str, Any] = {
-        "model": chosen_model,
-        "temperature": temperature,
-        "stream": False,
-        "input": [{"role": "user", "content": content}],
-    }
-
-    apis = [(base + "/responses", payload, _extract_responses_text)]
-    # 回退：部分模型多模态走 chat/completions
-    chat_content = [{**c} for c in content]
-    chat_payload = {
-        "model": chosen_model, "temperature": temperature,
-        "messages": [{"role": "user", "content": chat_content}],
-    }
-    apis.append((base + "/chat/completions", chat_payload,
-                 lambda d: d["choices"][0]["message"]["content"]))
-
-    last_err = ""
-    async with httpx.AsyncClient(timeout=settings.LLM_TIMEOUT, proxy=proxy) as client:
-        for url, pl, extract_fn in apis:
-            try:
-                resp = await client.post(url, headers=headers, json=pl)
-                if resp.status_code < 400:
-                    return extract_fn(resp.json())
-                body = (resp.text or "")[:300]
-                last_err = f"HTTP {resp.status_code}：{body}"
-                continue
-            except (KeyError, IndexError, TypeError) as e:
-                last_err = f"响应解析异常：{e}"
-                continue
-    raise RuntimeError(f"多模态 LLM 调用失败：{last_err}")
-
-
-# ---------- 4.1 题目识别（图片 → 结构化文本 + LaTeX）----------
-_RECOGNIZE_PROMPT = """你是一名学科题目识别助手。请识别给定的题目图片（或文字），输出结构化结果。
-要求：
-1. text：题目的完整纯文字转写（含题号、条件、问句；数学符号尽量用文字描述，如"平方"而非^2）。
-2. latex：题目中涉及的数学公式 LaTeX 表示（若无公式留空字符串）。例如 \\frac{a}{b}、x^2-1=0。
-3. conditions：已知条件列表（字符串数组）。
-4. goal：求解目标（一句话）。
-5. subject：学科（数学/物理/化学/...），无法判断写"综合"。
-6. problem_type：题型（选择题/填空题/计算题/证明题/应用题/...）。
-只输出 JSON：{"text":"...","latex":"...","conditions":[...],"goal":"...","subject":"...","problem_type":"..."}"""
-
-
-async def recognize_problem(
-    text: str | None = None,
-    image_b64: str | None = None,
-    image_media_type: str = "image/png",
-) -> dict:
-    """识别题目：支持纯文字输入或图片 OCR（含公式）。返回结构化 JSON。"""
-    if not _llm_available():
-        # 无 LLM 时：直接用文字兜底
-        return {
-            "text": text or "", "latex": "", "conditions": [],
-            "goal": "", "subject": "综合", "problem_type": "未知",
-            "used_llm": False,
-        }
-    prompt = _RECOGNIZE_PROMPT + ("\n\n题目文字：\n" + text if text else "")
-    try:
-        raw = await _chat_completion_vision(
-            prompt, image_b64, image_media_type, temperature=0.1, want_json=True,
-        )
-        data = json.loads(_extract_json(raw))
-        data["used_llm"] = True
-        return data
-    except Exception as e:
-        return {
-            "text": text or "", "latex": "", "conditions": [],
-            "goal": "", "subject": "综合", "problem_type": "未知",
-            "used_llm": False, "error": str(e),
-        }
-
-
-# ---------- 4.2 知识点定位 ----------
-_LOCATE_PROMPT = """你是一名学科教学专家。给定一道题目和该学科的知识点节点列表，请把题目精准映射到一个或多个知识点节点。
-知识点列表（JSON 数组，每项含 id/name/category/description）：
-__NODES__
-
-题目：
-__PROBLEM__
-
-要求：返回命中的知识点 id 列表（按相关度从高到低，最多 3 个）。
-只输出 JSON：{"node_ids":["id1","id2"],"reason":"一句话说明为何命中这些知识点"}"""
-
-
-async def locate_knowledge_points(problem_text: str, nodes: list[dict]) -> tuple[list[str], str]:
-    """把题目映射到知识图谱节点。nodes 为 [{'id','name','category','description'},...]。"""
-    if not nodes:
-        return [], "知识图谱为空，无法定位知识点。"
-    if not _llm_available():
-        # 离线兜底：关键词匹配
-        p_low = (problem_text or "").lower()
-        hit = [n["id"] for n in nodes
-               if n["name"] and n["name"].lower() in p_low
-               or any(w in p_low for w in (n["name"] or "").split() if len(w) >= 2)]
-        return hit[:3], "离线关键词匹配。"
-    prompt = (_LOCATE_PROMPT
-              .replace("__NODES__", json.dumps(nodes[:60], ensure_ascii=False))
-              .replace("__PROBLEM__", problem_text[:800]))
-    try:
-        raw = await _chat_completion([{"role": "user", "content": prompt}], temperature=0.1)
-        data = json.loads(_extract_json(raw))
-        return data.get("node_ids") or [], data.get("reason") or ""
-    except Exception as e:
-        return [], f"知识点定位失败：{e}"
-
-
-# ---------- 4.3 教学计划生成（含板书指令 + 分步讲解 + 验证提问）----------
-# 板书指令 schema（前端 Canvas 引擎按指令绘制）：
-#   {"type":"write","text":"...","x":0.5,"y":0.3}   写文字（x,y 为画布相对坐标 0~1）
-#   {"type":"latex","tex":"\\frac{a}{b}","x":0.5,"y":0.4}  渲染公式（KaTeX 叠加）
-#   {"type":"arrow","x1":..,"y1":..,"x2":..,"y2":..}  画箭头
-#   {"type":"box","x":..,"y":..,"w":..,"h":..}       画框
-#   {"type":"highlight","target":0}                   高亮第 N 条指令
-_PLAN_PROMPT = """你是一名有耐心的网课老师，正在为一道题目做分步教学设计。基于知识图谱的前置关系，先补讲薄弱的前置知识，再分步讲解原题。
-
-题目：
-__PROBLEM__
-
-命中知识点：__POINTS__
-
-需补讲的前置知识链（从基础到应用）：__PREREQ__
-
-用户当前掌握度（0-100，低于 60 为薄弱）：__MASTERY__
-
-请生成完整教学队列，步骤数 4~8 步。每步包含：
-- kind："prereq"（前置补讲）或 "solve"（原题解题步骤）
-- node_name：关联的知识点名称（prereq 步为前置知识点名，solve 步可留空）
-- board：板书指令 JSON 数组，用相对坐标(0~1)，每条指令 type∈[write,latex,arrow,box,highlight]。
-  write 写文字，latex 渲染公式，arrow 画箭头，box 画框，highlight 高亮第N条。
-  板书要体现手写网课风格，关键公式用 latex，关键步骤用 highlight。
-- narration：同步口播讲解文本（2~4 句，像真人老师讲课）。
-- verify_question：讲完后验证用户是否理解的提问（1 句，简短选择/填空式）。
-- verify_answer：验证提问的标准答案。
-
-只输出 JSON：{"steps":[{"kind":"...","node_name":"...","board":[...],"narration":"...","verify_question":"...","verify_answer":"..."}],"strategy":"一句话说明教学策略"}"""
-
-
-async def build_teaching_plan(
-    problem: dict, located_points: list[dict],
-    prereq_chain: list[dict], mastery_map: dict,
-) -> dict:
-    """生成完整教学计划。返回 {"steps":[...],"strategy":"...","used_llm":bool}。"""
-    if not _llm_available():
-        # 离线兜底：单步直接讲原题
-        return {
-            "steps": [{
-                "kind": "solve", "node_name": located_points[0]["name"] if located_points else "",
-                "board": [{"type": "write", "text": problem.get("text", "")[:40], "x": 0.5, "y": 0.2}],
-                "narration": f"我们来看这道关于{located_points[0]['name'] if located_points else '该知识点'}的题目。",
-                "verify_question": "你理解这道题的求解目标了吗？", "verify_answer": "理解",
-            }],
-            "strategy": "离线兜底：未配置 LLM，仅单步讲解。",
-            "used_llm": False,
-        }
-    prompt = (_PLAN_PROMPT
-              .replace("__PROBLEM__", json.dumps(problem, ensure_ascii=False)[:600])
-              .replace("__POINTS__", json.dumps(located_points, ensure_ascii=False))
-              .replace("__PREREQ__", json.dumps(prereq_chain, ensure_ascii=False))
-              .replace("__MASTERY__", json.dumps(mastery_map, ensure_ascii=False)))
-    try:
-        raw = await _chat_completion([{"role": "user", "content": prompt}], temperature=0.3)
-        data = json.loads(_extract_json(raw))
-        data["used_llm"] = True
-        return data
-    except Exception as e:
-        return {
-            "steps": [], "strategy": f"教学计划生成失败：{e}", "used_llm": False,
-        }
-
-
-# ---------- 4.3 实时互动对话（用户打断提问）----------
-_DIALOGUE_PROMPT = """你是一名有耐心的网课老师。学生正在听你讲题，突然打断提问。请基于当前讲解上下文，针对学生的提问给出 2~4 句的针对性解答，必要时换个方法或举更基础的例子。
-
-当前讲解上下文（第 {step} 步，知识点 {node}）：
-正在讲：{narration}
-
-题目：{problem}
-
-学生提问：{question}
-
-要求：直接给出回答文本（不要 JSON，不要标题，像真人老师口语化讲解）。"""
-
-
-async def tutor_dialogue(
-    question: str, step_index: int, node_name: str,
-    narration: str, problem_text: str,
-) -> tuple[str, bool]:
-    """用户打断提问 → LLM 结合上下文解答。返回 (answer, used_llm)。"""
-    if not _llm_available():
-        return ("未配置 LLM，无法实时解答打断提问。请先在后端 .env 填入 LLM_API_KEY。", False)
-    prompt = (_DIALOGUE_PROMPT
-              .replace("{step}", str(step_index))
-              .replace("{node}", node_name or "当前知识点")
-              .replace("{narration}", narration or "")
-              .replace("{problem}", problem_text or "")
-              .replace("{question}", question))
-    try:
-        raw = await _chat_completion(
-            [{"role": "user", "content": prompt}], temperature=0.5, want_json=False,
-        )
-        return raw.strip(), True
-    except Exception as e:
-        return f"解答失败：{e}", False
-
-
-# ---------- 4.5 巩固练习生成 ----------
-_EXERCISE_PROMPT = """你是一名学科出题老师。请围绕给定知识点，生成 {n} 道难度递进的变式练习题（改数字/换情境/加干扰项）。
-
-知识点：{name}
-类别：{category}
-简介：{desc}
-目标难度（1-5）：{diff}
-
-要求每题包含：
-- question：题干（含必要条件）
-- choices：若为选择题给 4 个选项数组，否则 null
-- answer：标准答案（选择题给选项字母如"A"，填空/计算给答案文本）
-- explanation：解析（2~3 句）
-- difficulty：本题难度 1-5
-
-只输出 JSON：{"items":[{"question":"...","choices":["A. ","B. ","C. ","D. "],"answer":"A","explanation":"...","difficulty":3}]}"""
-
-
-async def generate_exercises(
-    node_name: str, category: str, description: str,
-    difficulty: int = 3, n: int = 3,
-) -> list[dict]:
-    """生成 n 道变式练习题。"""
-    if not _llm_available():
-        return []
-    prompt = (_EXERCISE_PROMPT
-              .replace("{n}", str(n))
-              .replace("{name}", node_name)
-              .replace("{category}", category or "未分类")
-              .replace("{desc}", description or "暂无简介")
-              .replace("{diff}", str(difficulty)))
-    try:
-        raw = await _chat_completion([{"role": "user", "content": prompt}], temperature=0.5)
-        data = json.loads(_extract_json(raw))
-        items = data.get("items") or []
-        for it in items:
-            it.setdefault("question", "")
-            it.setdefault("answer", "")
-            it.setdefault("explanation", "")
-            it.setdefault("difficulty", difficulty)
-            it.setdefault("choices", None)
-        return items
-    except Exception:
-        return []
-
-
-# ---------- 4.5 练习批改 ----------
-_GRADE_PROMPT = """你是一名批改老师。请判定学生答案是否正确，并给出针对性讲解。
-
-题目：{question}
-标准答案：{answer}
-学生答案：{user_answer}
-
-只输出 JSON：{"is_correct":true/false,"explanation":"2~3句解析，若错则说明错在哪、正确思路是什么"}"""
-
-
-async def grade_exercise(question: str, answer: str, user_answer: str) -> dict:
-    """批改练习。返回 {"is_correct":bool,"explanation":str,"used_llm":bool}。"""
-    # 规则快速判定：完全匹配
-    if (user_answer or "").strip().lower() == (answer or "").strip().lower():
-        return {"is_correct": True, "explanation": "完全正确。", "used_llm": False}
-    if not _llm_available():
-        correct = (user_answer or "").strip().lower() in (answer or "").strip().lower()
-        return {"is_correct": correct, "explanation": "答案不匹配。" if not correct else "答案包含正确项。",
-                "used_llm": False}
-    prompt = (_GRADE_PROMPT
-              .replace("{question}", question)
-              .replace("{answer}", answer)
-              .replace("{user_answer}", user_answer or ""))
-    try:
-        raw = await _chat_completion([{"role": "user", "content": prompt}], temperature=0.1)
-        data = json.loads(_extract_json(raw))
-        data["used_llm"] = True
-        return data
-    except Exception as e:
-        return {"is_correct": False, "explanation": f"批改失败：{e}", "used_llm": False}
-
-
-# ---------- 工具：从 LLM 输出里抽取 JSON（容错）----------
-def _extract_json(raw: str) -> str:
-    """LLM 偶尔在 JSON 前后带说明文字，抽取第一个 {...} 块。"""
-    raw = raw or ""
-    s = raw.find("{")
-    e = raw.rfind("}")
-    if s != -1 and e != -1 and e > s:
-        return raw[s:e + 1]
-    return raw

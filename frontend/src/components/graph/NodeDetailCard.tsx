@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { X, BookOpen, Link2, CheckCircle2, CircleDot, ExternalLink, Star, Tag, Play, Loader2, Search } from 'lucide-react';
+import { X, BookOpen, Link2, CircleDot, ExternalLink, Star, Tag, Play, Loader2, Search, ClipboardCheck } from 'lucide-react';
 import type { KnowledgeNode } from '../../types';
 import { CATEGORY_META } from '../../mock/sampleKnowledgeGraph';
 import { useKnowledge } from '../../context/KnowledgeContext';
 import { authedFetch } from '../../context/AuthContext';
 import { API_BASE } from '../../lib/graphMap';
+import MultimodalPreview from './MultimodalPreview';
 
 interface BiliVideo {
   bvid: string;
@@ -23,6 +24,9 @@ interface Props {
   onClose: () => void;
   onJump?: (nodeId: string) => void;
   relatedNodes?: KnowledgeNode[];
+  onStudy?: () => void;
+  onQuiz?: () => void;
+  variant?: 'panel' | 'page';
 }
 
 function formatCount(n: number): string {
@@ -30,8 +34,8 @@ function formatCount(n: number): string {
   return String(n);
 }
 
-export default function NodeDetailCard({ node, onClose, onJump, relatedNodes = [] }: Props) {
-  const { masteredIds, toggleMastered, graph } = useKnowledge();
+export default function NodeDetailCard({ node, onClose, onJump, onStudy, onQuiz, variant = 'panel', relatedNodes = [] }: Props) {
+  const { masteredIds, graph } = useKnowledge();
 
   // B站视频搜索
   const [videos, setVideos] = useState<BiliVideo[]>([]);
@@ -73,9 +77,19 @@ export default function NodeDetailCard({ node, onClose, onJump, relatedNodes = [
         .map((r) => graph.nodes.find((n) => n.id === r.target)!)
         .filter(Boolean)
     : [];
+  const linkedKnowledge = node.multimodal && graph
+    ? graph.relations
+        .filter((r) => r.target === node.id && r.type === 'contains')
+        .map((r) => graph.nodes.find((n) => n.id === r.source)!)
+        .filter(Boolean)
+    : [];
 
   return (
-    <div className="absolute top-0 right-0 bottom-0 z-20 w-[380px] max-w-[90vw] bg-paper-50 border-l-2 border-ink/15 shadow-[-4px_0_0_rgba(59,51,43,0.06)] animate-pencil-in flex flex-col">
+    <div className={
+      variant === 'page'
+        ? 'relative z-10 w-full max-w-4xl mx-auto bg-paper-50 border-2 border-ink/15 shadow-sketch-lg rounded-sketch-lg animate-pencil-in flex flex-col overflow-hidden'
+        : 'absolute top-0 right-0 bottom-0 z-20 w-[380px] max-w-[90vw] bg-paper-50 border-l-2 border-ink/15 shadow-[-4px_0_0_rgba(59,51,43,0.06)] animate-pencil-in flex flex-col'
+    }>
       {/* 头部颜色带 */}
       <div
         className="relative px-5 py-4 text-white border-b-2 border-ink/15"
@@ -127,6 +141,24 @@ export default function NodeDetailCard({ node, onClose, onJump, relatedNodes = [
             </p>
           </div>
         </div>
+
+        {node.multimodal && <MultimodalPreview node={node} />}
+
+        {linkedKnowledge.length > 0 && (
+          <div>
+            <h4 className="flex items-center gap-1.5 font-bold text-ink mb-2 text-sm">
+              <Link2 size={14} className="text-sketch-blueDeep" />
+              关联知识点
+            </h4>
+            <div className="flex flex-wrap gap-1.5">
+              {linkedKnowledge.map((item) => (
+                <button key={item.id} onClick={() => onJump?.(item.id)} className="sketch-tag bg-sketch-blue/10 text-sketch-blueDeep border-sketch-blue/30 hover:bg-sketch-blue/20 transition-colors">
+                  {item.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 示例 */}
         {node.examples?.length > 0 && (
@@ -281,25 +313,18 @@ export default function NodeDetailCard({ node, onClose, onJump, relatedNodes = [
 
       {/* 底部操作栏 */}
       <div className="border-t-2 border-ink/10 p-4 bg-paper-100/70 backdrop-blur-sm">
-        <button
-          onClick={() => toggleMastered(node.id)}
-          className={
-            'w-full sketch-btn ' +
-            (mastered
-              ? 'bg-paper-200 text-ink border-ink/30 hover:bg-paper-50'
-              : 'bg-sketch-green text-white border-sketch-greenDeep hover:bg-sketch-greenDeep')
-          }
-        >
-          {mastered ? (
-            <>
-              <CheckCircle2 size={16} /> 已掌握 · 点击取消
-            </>
-          ) : (
-            <>
-              <CheckCircle2 size={16} /> 标记为已掌握
-            </>
-          )}
-        </button>
+        {onStudy ? (
+          <button onClick={onStudy} className="w-full sketch-btn bg-sketch-blue text-white border-sketch-blueDeep hover:bg-sketch-blueDeep">
+            <BookOpen size={16} /> 点击详细学习
+          </button>
+        ) : (
+          <button
+            onClick={onQuiz}
+            className="w-full sketch-btn bg-sketch-green text-white border-sketch-greenDeep hover:bg-sketch-greenDeep"
+          >
+            <ClipboardCheck size={16} /> {mastered ? '再次进入小测试' : '进入小测试'}
+          </button>
+        )}
       </div>
     </div>
   );

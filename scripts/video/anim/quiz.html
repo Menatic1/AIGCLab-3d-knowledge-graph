@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1920px;height:1080px;overflow:hidden;background:#04070e}
+  #stage{position:relative;width:1920px;height:1080px;overflow:hidden;
+    background:
+      radial-gradient(ellipse 1050px 720px at 50% 44%, rgba(90,150,230,0.17) 0%, rgba(90,150,230,0) 62%),
+      radial-gradient(ellipse 700px 900px at 96% 12%, rgba(60,110,190,0.10) 0%, rgba(60,110,190,0) 60%),
+      linear-gradient(165deg,#0b1c33 0%,#102a48 34%,#123254 52%,#0c1e39 76%,#071223 100%)}
+  .grid-fine{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(150,195,240,0.055) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(150,195,240,0.055) 1px,transparent 1px);background-size:32px 32px}
+  .grid-bold{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(150,195,240,0.10) 1.5px,transparent 1.5px),
+    linear-gradient(90deg,rgba(150,195,240,0.10) 1.5px,transparent 1.5px);background-size:160px 160px}
+  .vig{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse 1500px 1000px at 50% 50%,rgba(0,0,0,0) 42%,rgba(0,0,0,0.62) 100%)}
+  svg{position:absolute;inset:0}
+  text{font-family:"Microsoft YaHei","微软雅黑",sans-serif}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="grid-fine"></div><div class="grid-bold"></div>
+  <svg id="svg" viewBox="0 0 1920 1080" width="1920" height="1080"></svg>
+  <div class="vig"></div>
+</div>
+<script>
+const clamp01=v=>v<0?0:v>1?1:v;
+const easeOut=p=>1-Math.pow(1-p,3);
+const seg=(t,a,b)=>clamp01((t-a)/(b-a));
+const NS="http://www.w3.org/2000/svg";
+const svg=document.getElementById("svg");
+const el=(n,a)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+
+const cap=el("text",{x:960,y:168,"text-anchor":"middle",fill:"rgba(232,196,116,0.95)","font-size":25,"letter-spacing":11,opacity:0});
+cap.textContent="知识掌握小测验 · 三题达标";
+svg.appendChild(cap);
+
+// 三张题卡
+const CW=340, CH=290, CY=470;
+const CXS=[520,960,1400];
+const cards=CXS.map((cx,i)=>{
+  const g=el("g",{opacity:0});
+  const rect=el("rect",{x:cx-CW/2,y:CY-CH/2,width:CW,height:CH,rx:18,fill:"rgba(14,32,56,0.88)",stroke:"rgba(150,195,240,0.5)","stroke-width":1.8});
+  const num=el("text",{x:cx-CW/2+30,y:CY-CH/2+46,fill:"rgba(232,196,116,0.9)","font-size":24,"letter-spacing":3});
+  num.textContent="第 " + (i+1) + " 题";
+  // 选项条
+  const opts=[];
+  for(let k=0;k<3;k++){
+    const o=el("rect",{x:cx-CW/2+28,y:CY-46+k*54,width:CW-56,height:40,rx:9,fill:"rgba(120,170,220,0.13)",stroke:"rgba(150,195,240,0.28)","stroke-width":1.2});
+    opts.push(o);g.appendChild(o);
+  }
+  // 对勾
+  const ck=el("g",{opacity:0});
+  const cc=el("circle",{cx:cx+CW/2-40,cy:CY-CH/2+42,r:22,fill:"#7fe0c8"});
+  const path=el("path",{d:`M ${cx+CW/2-50} ${CY-CH/2+42} L ${cx+CW/2-44} ${CY-CH/2+50} L ${cx+CW/2-29} ${CY-CH/2+32}`,fill:"none",stroke:"#0b1c33","stroke-width":4,"stroke-linecap":"round","stroke-linejoin":"round"});
+  ck.appendChild(cc);ck.appendChild(path);
+  g.appendChild(rect);g.appendChild(num);g.appendChild(ck);
+  svg.appendChild(g);
+  return {g,ck,opts,cc,path};
+});
+
+// 进度条 + 达标线
+const BX=460, BY=830, BW2=1000, BH=18;
+svg.appendChild(el("rect",{x:BX,y:BY,width:BW2,height:BH,rx:9,fill:"rgba(120,170,220,0.16)"}));
+const fill=el("rect",{x:BX,y:BY,width:0,height:BH,rx:9,fill:"url(#g2)"});
+svg.appendChild(fill);
+const defs=el("defs",{});
+const lg=el("linearGradient",{id:"g2",x1:"0",y1:"0",x2:"1",y2:"0"});
+lg.appendChild(el("stop",{offset:"0%","stop-color":"#e6bd63"}));
+lg.appendChild(el("stop",{offset:"100%","stop-color":"#7fe0c8"}));
+defs.appendChild(lg);svg.appendChild(defs);
+const TH=0.67;                                   // 达标线 67%
+const tx=BX+BW2*TH;
+const tick=el("line",{x1:tx,y1:BY-16,x2:tx,y2:BY+BH+16,stroke:"rgba(240,200,116,0.95)","stroke-width":2.4,"stroke-dasharray":"6 5",opacity:0});
+const tickT=el("text",{x:tx,y:BY+52,"text-anchor":"middle",fill:"rgba(240,200,116,0.95)","font-size":19,"letter-spacing":2,opacity:0});
+tickT.textContent="达标线 67%";
+svg.appendChild(tick);svg.appendChild(tickT);
+const passTag=el("g",{opacity:0});
+passTag.appendChild(el("rect",{x:BX+BW2-230,y:BY-70,width:230,height:44,rx:22,fill:"rgba(127,224,200,0.18)",stroke:"rgba(127,224,200,0.7)","stroke-width":1.6}));
+const pt=el("text",{x:BX+BW2-115,y:BY-40,"text-anchor":"middle",fill:"rgba(190,246,228,0.98)","font-size":21,"letter-spacing":3});
+pt.textContent="3 / 3 已达标";
+passTag.appendChild(pt);svg.appendChild(passTag);
+
+function draw(t){
+  cap.setAttribute("opacity",(easeOut(seg(t,0.1,0.7))*0.95).toFixed(3));
+  cards.forEach((c,i)=>{
+    const a=easeOut(seg(t,0.15+i*0.16,0.7+i*0.16));
+    c.g.setAttribute("opacity",a.toFixed(3));
+    c.g.setAttribute("transform",`translate(0,${((1-a)*18).toFixed(2)})`);
+    const cka=easeOut(seg(t,0.95+i*0.5,1.35+i*0.5));
+    c.ck.setAttribute("opacity",cka.toFixed(3));
+    c.cc.setAttribute("r",(22*cka).toFixed(2));
+    c.opts.forEach((o,k)=>{
+      const oa=easeOut(seg(t,0.5+i*0.5+k*0.08,1.0+i*0.5+k*0.08));
+      o.setAttribute("stroke",oa>0.5&&k===1?"rgba(127,224,200,0.85)":"rgba(150,195,240,0.28)");
+      o.setAttribute("fill",oa>0.5&&k===1?"rgba(127,224,200,0.16)":"rgba(120,170,220,0.13)");
+    });
+  });
+  const fa=easeOut(seg(t,2.25,3.05));
+  fill.setAttribute("width",(BW2*0.85*fa).toFixed(1));
+  tick.setAttribute("opacity",(easeOut(seg(t,2.1,2.6))*0.95).toFixed(3));
+  tickT.setAttribute("opacity",(easeOut(seg(t,2.2,2.7))*0.95).toFixed(3));
+  passTag.setAttribute("opacity",(easeOut(seg(t,3.0,3.4))*0.98).toFixed(3));
+}
+window.__seek=t=>draw(t);
+window.__ready=true;
+window.__seek(0);
+</script>
+</body>
+</html>

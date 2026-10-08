@@ -6,6 +6,44 @@ from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
 
 
+class CourseOut(BaseModel):
+    id: int
+    owner_id: str
+    name: str
+    description: Optional[str] = None
+    role: Optional[Literal["owner", "teacher", "student"]] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CourseCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = Field(None, max_length=2000)
+
+
+class CourseUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = Field(None, max_length=2000)
+
+
+class CourseJoinOut(BaseModel):
+    course: CourseOut
+    already_member: bool
+
+
+class UserProfileOut(BaseModel):
+    id: str
+    username: str
+    role: Literal["teacher", "student"]
+
+
+class UserProfileUpdate(BaseModel):
+    username: Optional[str] = Field(None, min_length=2, max_length=32)
+
+
 # ---------------- Graph ----------------
 class KGNodeOut(BaseModel):
     id: str
@@ -41,47 +79,29 @@ class CategoryStat(BaseModel):
     count: int
 
 
-# ---------------- Knowledge Graph Meta（图谱列表）----------------
-class KnowledgeGraphMetaOut(BaseModel):
-    """图谱列表项：每份独立图谱的元信息（不含节点详情）。"""
-    id: str
-    user_id: str
-    title: str
-    source: str  # aigc / document / sample / default
-    source_ref: Optional[str] = None
-    description: Optional[str] = None
+# ---------------- Course Overview ----------------
+class DocumentStatusStat(BaseModel):
+    pending: int = 0
+    done: int = 0
+    error: int = 0
+
+
+class CourseOverviewOut(BaseModel):
+    course_id: int
+    course_name: str
+    # 课程资料
+    document_count: int = 0
+    documents_status: DocumentStatusStat = DocumentStatusStat()
+    # 知识点与关系
     nodes_count: int = 0
     relations_count: int = 0
-    created_at: datetime
-    updated_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class KnowledgeGraphDetailOut(BaseModel):
-    """图谱详情：元信息 + 节点 + 关系。"""
-    id: str
-    user_id: str
-    title: str
-    source: str
-    source_ref: Optional[str] = None
-    description: Optional[str] = None
-    nodes_count: int = 0
-    relations_count: int = 0
-    created_at: datetime
-    updated_at: datetime
-    nodes: List[KGNodeOut] = []
-    relations: List[KGRelationOut] = []
-
-    class Config:
-        from_attributes = True
-
-
-class GraphMetaUpdateRequest(BaseModel):
-    """改名/改描述"""
-    title: Optional[str] = Field(None, min_length=1, max_length=200)
-    description: Optional[str] = None
+    categories: List[CategoryStat] = []
+    # 图谱生成状态：empty(无数据) / building(解析中) / ready(已就绪)
+    graph_status: Literal["empty", "building", "ready"] = "empty"
+    # 待校对/待修正节点：描述为空或过短的节点
+    pending_review_count: int = 0
+    # 抽取进度估算：已完成文档 / 总文档
+    extraction_progress: float = 0.0
 
 
 # ---------------- Documents ----------------
@@ -104,7 +124,31 @@ class ExtractTaskOut(BaseModel):
     nodes_count: int = 0
     relations_count: int = 0
     error_msg: Optional[str] = None
-    graph_id: Optional[str] = None  # 该文档对应的独立图谱 id
+
+
+class DocumentTaskOut(BaseModel):
+    task_id: str
+    document_id: int
+    extract_status: str
+    nodes_count: int = 0
+    relations_count: int = 0
+    error_msg: Optional[str] = None
+
+
+class ExtractionResultOut(BaseModel):
+    nodes: List[KGNodeOut]
+    relations: List[KGRelationOut]
+
+
+class QAFeedbackRequest(BaseModel):
+    helpful: bool
+    comment: Optional[str] = Field(None, max_length=1000)
+
+
+class QAFeedbackOut(BaseModel):
+    question_id: int
+    helpful: bool
+    comment: Optional[str] = None
 
 
 # ---------------- QA ----------------
@@ -164,3 +208,56 @@ class LearningPathOut(BaseModel):
     steps: List[PathStep]
     total_steps: int
     remaining: int
+
+
+# ---------------- Adaptive learning / Quiz ----------------
+LearningPreference = Literal["reinforce", "balanced", "challenge"]
+
+
+class QuizSubmitRequest(BaseModel):
+    node_id: str = Field(..., min_length=1, max_length=64)
+    correct_count: int = Field(..., ge=0, le=100)
+    total_count: int = Field(..., ge=1, le=100)
+
+
+class QuizAttemptOut(BaseModel):
+    id: int
+    node_id: str
+    correct_count: int
+    total_count: int
+    accuracy: float
+    passed: bool
+    completed_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class LearningPreferenceUpdate(BaseModel):
+    preference: LearningPreference
+
+
+class LearningRecommendationOut(BaseModel):
+    node_id: str
+    name: str
+    category: str
+    description: Optional[str] = None
+    importance: float = 3.0
+    priority: int
+    prerequisites: List[str] = []
+    missing_prerequisites: List[str] = []
+    latest_accuracy: Optional[float] = None
+    reason: str
+
+
+class LearningReportOut(BaseModel):
+    user_id: str
+    learning_preference: LearningPreference
+    total_nodes: int
+    mastered_nodes: int
+    mastery_rate: float
+    mastered_node_ids: List[str] = []
+    quiz_count: int
+    average_accuracy: Optional[float] = None
+    weak_node_ids: List[str] = []
+    recent_attempts: List[QuizAttemptOut] = []

@@ -1,8 +1,4 @@
-"""图谱 CRUD + 统计 + 示例导入（旧版兼容路由 /api/graph）。
-
-注意：图谱列表/详情/删除/改名请用新版 /api/graphs（见 routers/graphs.py）。
-本路由主要保留给「单图谱节点/关系编辑」「示例加载」「按 user_id 兜底查询」。
-"""
+"""图谱 CRUD + 统计 + 示例导入。"""
 from __future__ import annotations
 
 from collections import Counter
@@ -11,14 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
-from ..auth import get_current_user
+from ..auth import get_current_user, require_teacher
 from ..database import get_db
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
-
-
-# 示例图谱使用的固定 graph_id（便于前端「加载示例」按钮幂等）
-SAMPLE_GRAPH_ID = "sample-graph"
 
 
 # ---------- 示例图谱（和前端 sampleKnowledgeGraph.ts 对应，方便直接加载）----------
@@ -129,75 +121,29 @@ SAMPLE_RELATIONS: list[dict] = [
 ]
 
 
-def _upsert_sample(db: Session, *, user_id: str = "default"):
-    """写入示例图谱：先建 KnowledgeGraph 记录，再写入带 graph_id 的节点/关系。
-
-    幂等：多次调用只产生一份示例图谱（SAMPLE_GRAPH_ID 固定）。
-    """
-    # 1) 图谱元数据
-    g = db.query(models.KnowledgeGraph).filter(
-        models.KnowledgeGraph.id == SAMPLE_GRAPH_ID
-    ).first()
-    if not g:
-        g = models.KnowledgeGraph(
-            id=SAMPLE_GRAPH_ID,
-            user_id=user_id,
-            title="计算机网络示例图谱",
-            source="sample",
-            source_ref="sample",
-            description="内置的计算机网络示例图谱（26 节点 / 48 关系）",
-            nodes_count=len(SAMPLE_NODES),
-            relations_count=len(SAMPLE_RELATIONS),
-        )
-        db.add(g)
-        db.commit()
-    else:
-        g.user_id = user_id
-
-    # 2) 节点（保持原始 id n1~n26，因为是示例图谱独占）
+def _upsert_sample(db: Session):
     for n in SAMPLE_NODES:
         row = db.query(models.KGNode).filter(models.KGNode.id == n["id"]).first()
         if row:
             row.name = n["name"]; row.category = n["category"]
             row.description = n["description"]; row.difficulty = n["difficulty"]
-            row.graph_id = SAMPLE_GRAPH_ID; row.user_id = user_id
         else:
-            row = models.KGNode(
-                **n, graph_id=SAMPLE_GRAPH_ID, user_id=user_id,
-            )
-            db.add(row)
-    # 3) 关系
+            db.add(models.KGNode(**n))
     for r in SAMPLE_RELATIONS:
         row = db.query(models.KGRelation).filter(models.KGRelation.id == r[0]).first()
         if row:
             row.source = r[1]; row.target = r[2]; row.type = r[3]; row.label = r[4]
-            row.graph_id = SAMPLE_GRAPH_ID; row.user_id = user_id
         else:
             db.add(models.KGRelation(
                 id=r[0], source=r[1], target=r[2], type=r[3], label=r[4],
-                graph_id=SAMPLE_GRAPH_ID, user_id=user_id,
             ))
     db.commit()
 
-    # 4) 更新计数
-    from .graphs import _refresh_counts
-    _refresh_counts(db, SAMPLE_GRAPH_ID)
 
-
-def _get_graph(
-    db: Session,
-    *,
-    user_id: str | None = None,
-    graph_id: str | None = None,
-    category: str | None = None,
-    q: str | None = None,
-) -> schemas.KnowledgeGraphOut:
-    """旧版兼容查询：按 user_id / graph_id 过滤；都不给则返回全部（仅限无认证场景）。"""
+def _get_graph(db: Session, category: str | None = None, q: str | None = None, course_id: int | None = None) -> schemas.KnowledgeGraphOut:
     qy = db.query(models.KGNode)
-    if graph_id:
-        qy = qy.filter(models.KGNode.graph_id == graph_id)
-    elif user_id:
-        qy = qy.filter(models.KGNode.user_id == user_id)
+    if course_id is not None:
+        qy = qy.filter(models.KGNode.course_id == course_id)
     if category:
         qy = qy.filter(models.KGNode.category == category)
     nodes = qy.all()
@@ -206,15 +152,13 @@ def _get_graph(
         nodes = [n for n in nodes if kw in n.name.lower() or kw in (n.description or "").lower()]
 
     node_ids = {n.id for n in nodes}
-    rels_q = db.query(models.KGRelation).filter(
+    rels_qy = db.query(models.KGRelation).filter(
         models.KGRelation.source.in_(node_ids),
         models.KGRelation.target.in_(node_ids),
     )
-    if graph_id:
-        rels_q = rels_q.filter(models.KGRelation.graph_id == graph_id)
-    elif user_id:
-        rels_q = rels_q.filter(models.KGRelation.user_id == user_id)
-    rels = rels_q.all()
+    if course_id is not None:
+        rels_qy = rels_qy.filter(models.KGRelation.course_id == course_id)
+    rels = rels_qy.all()
     return schemas.KnowledgeGraphOut(
         nodes=[schemas.KGNodeOut.model_validate(n) for n in nodes],
         relations=[schemas.KGRelationOut.model_validate(r) for r in rels],
@@ -225,32 +169,21 @@ def _get_graph(
 def get_graph(
     category: str | None = Query(None, description="按类别过滤"),
     q: str | None = Query(None, description="按名称/描述搜索"),
+    course_id: int | None = Query(None, description="按课程 ID 过滤"),
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
 ):
-    """旧版兜底查询：返回当前用户的全部图谱节点（合并视图）。
-
-    推荐：前端用 GET /api/graphs/{id} 获取单份图谱，避免不同图谱节点 id 冲突。
-    """
-    return _get_graph(db=db, user_id=user.id, category=category, q=q)
+    return _get_graph(db=db, category=category, q=q, course_id=course_id)
 
 
 @router.get("/stats/categories", response_model=list[schemas.CategoryStat])
-def get_category_stats(
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
-    rows = db.query(models.KGNode.category).filter(models.KGNode.user_id == user.id).all()
+def get_category_stats(db: Session = Depends(get_db)):
+    rows = db.query(models.KGNode.category).all()
     counter: Counter = Counter([r[0] for r in rows])
     return [{"category": c, "count": cnt} for c, cnt in counter.most_common()]
 
 
 @router.post("/nodes", response_model=schemas.KGNodeOut)
-def upsert_node(
-    payload: schemas.KGNodeOut,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
+def upsert_node(payload: schemas.KGNodeOut, db: Session = Depends(get_db), _=Depends(require_teacher)):
     row = db.query(models.KGNode).filter(models.KGNode.id == payload.id).first()
     if row:
         row.name = payload.name
@@ -260,19 +193,30 @@ def upsert_node(
         row.x = payload.x
         row.y = payload.y
     else:
-        row = models.KGNode(**payload.model_dump(), user_id=user.id)
+        row = models.KGNode(**payload.model_dump())
         db.add(row)
     db.commit()
     db.refresh(row)
     return row
 
 
+@router.delete("/nodes/{node_id}")
+def delete_node(node_id: str, db: Session = Depends(get_db), _=Depends(require_teacher)):
+    """删除指定节点，同时清理相关关系。"""
+    row = db.query(models.KGNode).filter(models.KGNode.id == node_id).first()
+    if not row:
+        raise HTTPException(404, f"节点 {node_id} 不存在")
+    # 删除关联关系
+    db.query(models.KGRelation).filter(
+        (models.KGRelation.source == node_id) | (models.KGRelation.target == node_id)
+    ).delete(synchronize_session=False)
+    db.delete(row)
+    db.commit()
+    return {"ok": True, "deleted": node_id}
+
+
 @router.post("/relations", response_model=schemas.KGRelationOut)
-def upsert_relation(
-    payload: schemas.KGRelationOut,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
+def upsert_relation(payload: schemas.KGRelationOut, db: Session = Depends(get_db), _=Depends(require_teacher)):
     # 检查两端节点是否存在
     for nid in (payload.source, payload.target):
         if not db.query(models.KGNode).filter(models.KGNode.id == nid).first():
@@ -282,45 +226,35 @@ def upsert_relation(
         row.source = payload.source; row.target = payload.target
         row.type = payload.type; row.label = payload.label
     else:
-        row = models.KGRelation(**payload.model_dump(), user_id=user.id)
+        row = models.KGRelation(**payload.model_dump())
         db.add(row)
     db.commit()
     db.refresh(row)
     return row
 
 
+@router.delete("/relations/{relation_id}")
+def delete_relation(relation_id: str, db: Session = Depends(get_db), _=Depends(require_teacher)):
+    """删除指定关系。"""
+    row = db.query(models.KGRelation).filter(models.KGRelation.id == relation_id).first()
+    if not row:
+        raise HTTPException(404, f"关系 {relation_id} 不存在")
+    db.delete(row)
+    db.commit()
+    return {"ok": True, "deleted": relation_id}
+
+
 @router.post("/seed-sample", response_model=schemas.KnowledgeGraphOut)
-def seed_sample(
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
-    """方便前端「加载示例」按钮调用：写入一份完整的示例图谱（幂等）。"""
-    _upsert_sample(db, user_id=user.id)
-    return _get_graph(db=db, graph_id=SAMPLE_GRAPH_ID, user_id=user.id)
+def seed_sample(db: Session = Depends(get_db)):
+    """方便前端「加载示例」按钮调用：写入一份完整的示例图谱。"""
+    _upsert_sample(db)
+    return _get_graph(db=db)
 
 
 @router.delete("/wipe")
-def wipe_graph(
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
-    """清空当前用户所有图谱（测试用）。"""
-    # 先删该用户所有图谱（含节点/关系级联）
-    user_graphs = db.query(models.KnowledgeGraph).filter(
-        models.KnowledgeGraph.user_id == user.id
-    ).all()
-    for g in user_graphs:
-        node_ids = [n.id for n in db.query(models.KGNode)
-                    .filter(models.KGNode.graph_id == g.id).all()]
-        if node_ids:
-            db.query(models.UserProgress).filter(
-                models.UserProgress.node_id.in_(node_ids)
-            ).delete(synchronize_session=False)
-        db.query(models.KGNode).filter(models.KGNode.graph_id == g.id).delete(synchronize_session=False)
-        db.query(models.KGRelation).filter(models.KGRelation.graph_id == g.id).delete(synchronize_session=False)
-        db.delete(g)
-    # 兜底：删 user_id 维度的孤儿
-    db.query(models.KGRelation).filter(models.KGRelation.user_id == user.id).delete(synchronize_session=False)
-    db.query(models.KGNode).filter(models.KGNode.user_id == user.id).delete(synchronize_session=False)
+def wipe_graph(db: Session = Depends(get_db)):
+    """清空图谱（测试用）。"""
+    db.query(models.KGRelation).delete()
+    db.query(models.KGNode).delete()
     db.commit()
     return {"ok": True}

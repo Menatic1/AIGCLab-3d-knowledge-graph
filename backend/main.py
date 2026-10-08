@@ -1,4 +1,4 @@
-"""AIGC 课程知识图谱 — FastAPI 后端入口。
+﻿"""AIGC 课程知识图谱 — FastAPI 后端入口。
 
 运行方法：
   cd backend
@@ -20,7 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import Base, engine, SessionLocal
-from app.routers import auth, documents, graph, graphs, progress, learning_path, qa, aigc, tutor
+from app.routers import auth, documents, graph, progress, learning_path, qa, aigc, learning, courses, users, course_data, course_learning
 from app.routers.graph import _upsert_sample
 
 
@@ -32,72 +32,49 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     os.makedirs(os.path.dirname(settings.SQLITE_URL.replace("sqlite:///", "")), exist_ok=True)
     Base.metadata.create_all(bind=engine)
 
-    # 1.5) 数据库迁移：给已存在的表添加 user_id / graph_id 列（SQLite ALTER TABLE）
-    from sqlalchemy import inspect as sa_inspect, text
+    # 1.5) 数据库迁移：给已存在的表添加 user_id 列（SQLite ALTER TABLE）
+    from sqlalchemy import inspect as sa_inspect
     insp = sa_inspect(engine)
     _mig_cols = {
-        "documents": ["user_id"],
-        "kg_nodes": ["user_id", "graph_id"],
-        "kg_relations": ["user_id", "graph_id"],
+        "users": ("role", "student"),
+        "documents": ("user_id", "default"),
+        "kg_nodes": ("user_id", "default"),
+        "kg_relations": ("user_id", "default"),
     }
     with engine.connect() as conn:
-        for table, cols in _mig_cols.items():
+        for table, (col, default) in _mig_cols.items():
+            if table in insp.get_table_names():
+                cols = [c["name"] for c in insp.get_columns(table)]
+                if col not in cols:
+                    conn.exec_driver_sql(
+                        f'ALTER TABLE "{table}" ADD COLUMN "{col}" VARCHAR(64) DEFAULT "{default}" NOT NULL'
+                    )
+                    conn.commit()
+
+        # New course-scoped records are nullable for backwards compatibility
+        # with the pre-course database created by the first demo version.
+        for table in ("documents", "kg_nodes", "kg_relations", "user_progress", "qa_records"):
             if table not in insp.get_table_names():
                 continue
-            existing = [c["name"] for c in insp.get_columns(table)]
-            for col in cols:
-                if col in existing:
-                    continue
-                if col == "user_id":
-                    conn.exec_driver_sql(
-                        f'ALTER TABLE "{table}" ADD COLUMN "{col}" VARCHAR(64) DEFAULT "default" NOT NULL'
-                    )
-                else:  # graph_id 可空
-                    conn.exec_driver_sql(
-                        f'ALTER TABLE "{table}" ADD COLUMN "{col}" VARCHAR(64) NULL'
-                    )
-            conn.commit()
+            cols = [c["name"] for c in insp.get_columns(table)]
+            if "course_id" not in cols:
+                conn.exec_driver_sql(f'ALTER TABLE "{table}" ADD COLUMN "course_id" INTEGER')
+                conn.commit()
+            if table == "qa_records":
+                if "feedback_helpful" not in cols:
+                    conn.exec_driver_sql('ALTER TABLE "qa_records" ADD COLUMN "feedback_helpful" BOOLEAN')
+                    conn.commit()
+                if "feedback_comment" not in cols:
+                    conn.exec_driver_sql('ALTER TABLE "qa_records" ADD COLUMN "feedback_comment" VARCHAR(1000)')
+                    conn.commit()
 
-    # 2) 首次启动（无任何节点）自动注入示例图谱，保证前端点开就有数据
-    #    同时把遗留的「无 graph_id」旧节点归入一个默认图谱，避免列表页丢失
+    # 2) 首次启动（无任何节点）自动注入示例图谱，保证前端一点开就有数据
     db = SessionLocal()
     try:
         from app import models  # noqa
-        import uuid as _uuid
-
         cnt = db.query(models.KGNode).count()
         if cnt == 0:
             _upsert_sample(db)
-
-        # 2.1) 给无 graph_id 的节点/关系补一个默认图谱归属
-        orphan_nodes = db.query(models.KGNode).filter(models.KGNode.graph_id.is_(None)).all()
-        if orphan_nodes:
-            # 取第一个孤儿节点的 user_id 作为默认图谱归属
-            owner = orphan_nodes[0].user_id or "default"
-            default_graph = models.KnowledgeGraph(
-                id="default-graph",
-                user_id=owner,
-                title="默认图谱（历史数据）",
-                source="default",
-                description="迁移自旧版本的无图谱归属节点",
-            )
-            db.merge(default_graph)
-            db.commit()
-            for n in orphan_nodes:
-                n.graph_id = "default-graph"
-            db.query(models.KGRelation).filter(models.KGRelation.graph_id.is_(None)).update(
-                {models.KGRelation.graph_id: "default-graph"}, synchronize_session=False
-            )
-            # 更新计数
-            db.query(models.KnowledgeGraph).filter(
-                models.KnowledgeGraph.id == "default-graph"
-            ).update({
-                models.KnowledgeGraph.nodes_count: db.query(models.KGNode).filter(
-                    models.KGNode.graph_id == "default-graph").count(),
-                models.KnowledgeGraph.relations_count: db.query(models.KGRelation).filter(
-                    models.KGRelation.graph_id == "default-graph").count(),
-            }, synchronize_session=False)
-            db.commit()
     finally:
         db.close()
 
@@ -122,12 +99,16 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(graph.router)
-app.include_router(graphs.router)
 app.include_router(progress.router)
 app.include_router(learning_path.router)
 app.include_router(qa.router)
 app.include_router(aigc.router)
-app.include_router(tutor.router)
+app.include_router(learning.router)
+app.include_router(courses.router)
+app.include_router(users.router)
+app.include_router(course_data.course_router)
+app.include_router(course_data.task_router)
+app.include_router(course_learning.router)
 
 
 @app.get("/api/health", tags=["system"])

@@ -1,0 +1,41 @@
+graph TB
+    subgraph 用户端
+        Browser["🖥️ 用户浏览器"]
+    end
+    
+    subgraph 前端层
+        direction LR
+        F1[pages 页面层]
+        F2[components 组件层]
+        F3[context 状态层]
+        F4[services 服务层]
+        F5[middleware 中间件]
+        F6[utils 工具层]
+    end
+    
+    subgraph 后端层
+        subgraph FastAPI 服务
+            direction TB
+            B1[auth 认证权限]
+            B2[routers 路由层]
+            B3[services 业务层]
+            B4[models 数据层]
+        end
+        B5[parsers 文档解析]
+    end
+    
+    subgraph 数据层
+        direction LR
+        DB[("🗄️ SQLite 数据库")]
+        AI["🤖 大模型 LLM API"]
+    end
+    
+    Browser -->|HTTP 请求| 前端层
+    前端层 -->|HTTP/JSON| 后端层
+    后端层 --> 数据层
+    
+    style Browser fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style F1 fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+    style B2 fill:#fef3c7,stroke:#d97706,stroke-width:2px
+    style DB fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style AI fill:#fce7f3,stroke:#db2777,stroke-width:2px

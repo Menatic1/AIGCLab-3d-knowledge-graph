@@ -1,14 +1,19 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import type {
   KnowledgeGraph,
+  KnowledgeNode,
   UploadedDocument,
   ChatMessage,
   PathRecommendation,
   PathStage,
+  LearningPreference,
+  QuizAttempt,
 } from '../types';
 import { sampleKnowledgeGraph, qaKnowledgeBase, initialMessages } from '../mock/sampleKnowledgeGraph';
-import { mapBackendGraph, API_BASE } from '../lib/graphMap';
-import { authedFetch } from './AuthContext';
+import { mapBackendGraph, mapCategoryToZh, mapRelationTypeToZh, API_BASE } from '../lib/graphMap';
+import { authedFetch, useAuth } from './AuthContext';
+import { useCourse } from './CourseContext';
+import { fetchLearningReport, persistLearningPreference, persistQuizResult } from '../api/learning';
 
 // ==================== 推荐算法 ====================
 /**
@@ -24,7 +29,9 @@ import { authedFetch } from './AuthContext';
  */
 function buildRecommendations(
   graph: KnowledgeGraph,
-  masteredIds: Set<string>
+  masteredIds: Set<string>,
+  quizAttempts: QuizAttempt[],
+  preference: LearningPreference,
 ): { recommendations: PathRecommendation[]; stages: PathStage[] } {
   const prereqMap = new Map<string, string[]>(); // nodeId -> list of prerequisite nodeIds
   graph.relations.forEach((r) => {
@@ -37,6 +44,15 @@ function buildRecommendations(
   });
 
   const nodeById = new Map(graph.nodes.map((n) => [n.id, n]));
+  const latestAttemptByNode = new Map<string, QuizAttempt>();
+  quizAttempts.forEach((attempt) => latestAttemptByNode.set(attempt.nodeId, attempt));
+  const weakNodeIds = new Set(
+    [...latestAttemptByNode.values()]
+      .filter((attempt) => attempt.accuracy < 67)
+      .map((attempt) => attempt.nodeId),
+  );
+  const prerequisiteForWeakNodes = new Set<string>();
+  weakNodeIds.forEach((id) => (prereqMap.get(id) ?? []).forEach((pre) => prerequisiteForWeakNodes.add(pre)));
 
   const scored: PathRecommendation[] = [];
   graph.nodes.forEach((n) => {
@@ -45,6 +61,24 @@ function buildRecommendations(
     const satisfied = pres.filter((p) => masteredIds.has(p));
     const missing = pres.filter((p) => !masteredIds.has(p));
     const ratio = pres.length === 0 ? 0.5 : satisfied.length / pres.length; // 无前序也有推荐价值
+    const latestAttempt = latestAttemptByNode.get(n.id);
+    const isWeak = !!latestAttempt && latestAttempt.accuracy < 67;
+    const isWeakPrerequisite = prerequisiteForWeakNodes.has(n.id);
+    const preferenceBoost = preference === 'reinforce'
+      ? (isWeak ? 28 : isWeakPrerequisite ? 18 : 0)
+      : preference === 'challenge'
+        ? (n.importance >= 4 && ratio >= 0.5 ? 12 : 0)
+        : 0;
+    const score = ratio * 50 + n.importance * 7 + preferenceBoost + (isWeak ? 10 : 0);
+    const reason = isWeak
+      ? `上次测试正确率 ${latestAttempt!.accuracy}% ，建议优先巩固`
+      : isWeakPrerequisite
+        ? '是薄弱知识点的前置基础，建议先补齐'
+        : preference === 'challenge' && n.importance >= 4
+          ? '符合你的挑战进阶偏好，且属于重点知识'
+          : missing.length === 0
+            ? '前置知识已满足，可以开始学习'
+            : `已满足 ${satisfied.length}/${pres.length} 个前置知识`;
     scored.push({
       nodeId: n.id,
       nodeName: n.name,
@@ -52,17 +86,17 @@ function buildRecommendations(
       satisfiedPrerequisites: satisfied,
       missingPrerequisites: missing,
       learningOrder: 0,
+      reason,
+      latestAccuracy: latestAttempt?.accuracy,
     });
     // 内部字段用于排序
-    (scored[scored.length - 1] as any)._ratio = ratio;
-    (scored[scored.length - 1] as any)._importance = n.importance;
+    (scored[scored.length - 1] as any)._score = score;
     (scored[scored.length - 1] as any)._missingCount = missing.length;
   });
 
   scored.sort((a, b) => {
     const A = a as any, B = b as any;
-    if (B._ratio !== A._ratio) return B._ratio - A._ratio;
-    if (B._importance !== A._importance) return B._importance - A._importance;
+    if (B._score !== A._score) return B._score - A._score;
     return A._missingCount - B._missingCount;
   });
 
@@ -126,42 +160,27 @@ function mockAnswer(question: string, graph: KnowledgeGraph): { answer: string; 
 }
 
 // ==================== Context 定义 ====================
-
-// 图谱列表项（对应后端 KnowledgeGraphMetaOut）
-export interface GraphMeta {
-  id: string;
-  user_id: string;
-  title: string;
-  source: string; // aigc / document / sample / default
-  source_ref: string | null;
-  description: string | null;
-  nodes_count: number;
-  relations_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
 interface KnowledgeContextValue {
   // 图谱
   graph: KnowledgeGraph | null;
   hasGraph: boolean;
-  currentGraphId: string | null;
-  // 图谱列表
-  graphs: GraphMeta[];
-  refreshGraphList: () => Promise<void>;
-  loadGraphById: (graphId: string) => Promise<void>;
-  deleteGraph: (graphId: string) => Promise<void>;
-  renameGraph: (graphId: string, title: string, description?: string) => Promise<void>;
+  reloadGraph: () => Promise<void>;
   // 文档
   documents: UploadedDocument[];
   addDocument: (file: File) => void;
   triggerParse: (docId: string) => Promise<void>;
-  loadSampleGraph: () => Promise<void>;
+  loadSampleGraph: () => void;
   // 掌握状态
   masteredIds: Set<string>;
   markAsMastered: (id: string) => void;
   markAsNotMastered: (id: string) => void;
   toggleMastered: (id: string) => void;
+  // 测试与学习画像
+  quizAttempts: QuizAttempt[];
+  weakNodeIds: Set<string>;
+  submitQuiz: (nodeId: string, correct: number, total: number) => QuizAttempt;
+  learningPreference: LearningPreference;
+  setLearningPreference: (preference: LearningPreference) => void;
   // 推荐
   recommendations: PathRecommendation[];
   pathStages: PathStage[];
@@ -170,82 +189,114 @@ interface KnowledgeContextValue {
   messages: ChatMessage[];
   sendQuestion: (question: string) => Promise<void>;
   clearChat: () => void;
+  // 当前正在详细学习的节点
+  learningNode: KnowledgeNode | null;
+  setLearningNode: (node: KnowledgeNode | null) => void;
+  updateNode: (id: string, patch: Partial<KnowledgeNode>) => void;
+  addNode: (node: Omit<KnowledgeNode, 'id'> & { id?: string }) => string;
+  deleteNode: (id: string) => void;
+  addRelation: (relation: Omit<import('../types').KnowledgeRelation, 'id'> & { id?: string }) => string;
+  deleteRelation: (id: string) => void;
 }
 
 const KnowledgeContext = createContext<KnowledgeContextValue | null>(null);
+const LEARNING_PROFILE_KEY = 'aigc_learning_profile_v1';
+
+function readLearningProfile(): { masteredIds: string[]; quizAttempts: QuizAttempt[]; preference: LearningPreference } {
+  try {
+    const raw = localStorage.getItem(LEARNING_PROFILE_KEY);
+    if (!raw) return { masteredIds: [], quizAttempts: [], preference: 'balanced' };
+    const saved = JSON.parse(raw) as Partial<{ masteredIds: string[]; quizAttempts: QuizAttempt[]; preference: LearningPreference }>;
+    return {
+      masteredIds: Array.isArray(saved.masteredIds) ? saved.masteredIds : [],
+      quizAttempts: Array.isArray(saved.quizAttempts) ? saved.quizAttempts : [],
+      preference: saved.preference === 'reinforce' || saved.preference === 'challenge' ? saved.preference : 'balanced',
+    };
+  } catch {
+    return { masteredIds: [], quizAttempts: [], preference: 'balanced' };
+  }
+}
 
 export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
-  const [graph, setGraph] = useState<KnowledgeGraph | null>(null);
+  const { user } = useAuth();
+  const { currentCourseId } = useCourse();
+  // 直接进入工作台时展示内置示例图谱，便于无需账号即可浏览完整功能。
+  const [graph, setGraph] = useState<KnowledgeGraph | null>(sampleKnowledgeGraph);
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
-  const [masteredIds, setMasteredIds] = useState<Set<string>>(new Set());
+  const [masteredIds, setMasteredIds] = useState<Set<string>>(() => new Set(readLearningProfile().masteredIds));
+  const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>(() => readLearningProfile().quizAttempts);
+  const [learningPreference, setLearningPreferenceState] = useState<LearningPreference>(() => readLearningProfile().preference);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
-  // 图谱列表 + 当前查看的图谱 id
-  const [graphs, setGraphs] = useState<GraphMeta[]>([]);
-  const [currentGraphId, setCurrentGraphId] = useState<string | null>(null);
+  const [learningNode, setLearningNode] = useState<KnowledgeNode | null>(null);
   // 保存尚未真正上传的 File 引用（key = docId）
   const fileRefs = useRef<Map<string, File>>(new Map());
 
   const hasGraph = graph !== null;
 
-  // ---------------- 图谱列表：刷新 / 按 id 加载 / 删除 / 改名 ----------------
-  const refreshGraphList = useCallback(async () => {
+  useEffect(() => {
+    localStorage.setItem(LEARNING_PROFILE_KEY, JSON.stringify({
+      masteredIds: [...masteredIds], quizAttempts, preference: learningPreference,
+    }));
+  }, [masteredIds, quizAttempts, learningPreference]);
+
+  // 后端可用时，以服务端学习档案恢复本次账号的记录；离线时继续使用本地演示状态。
+  useEffect(() => {
+    let active = true;
+    void fetchLearningReport().then((report) => {
+      if (!active || !report) return;
+      setMasteredIds(new Set(report.mastered_node_ids));
+      setQuizAttempts(report.recent_attempts.slice().reverse().map((attempt) => ({
+        id: `api_${attempt.id}`,
+        nodeId: attempt.node_id,
+        correct: attempt.correct_count,
+        total: attempt.total_count,
+        accuracy: attempt.accuracy,
+        completedAt: attempt.completed_at,
+      })));
+      setLearningPreferenceState(report.learning_preference);
+    });
+    return () => { active = false; };
+  }, [user?.id]);
+
+  // ---------------- 课程切换时按 course_id 拉取对应图谱 ----------------
+  const loadGraph = useCallback(async (courseId: number | null) => {
+    const url = courseId !== null
+      ? `${API_BASE}/api/graph?course_id=${courseId}`
+      : `${API_BASE}/api/graph`;
     try {
-      const resp = await authedFetch(`${API_BASE}/api/graphs`);
+      const resp = await authedFetch(url);
       if (!resp.ok) return;
-      setGraphs(await resp.json());
-    } catch {
-      /* 静默失败：列表页会显示空态 */
-    }
-  }, []);
-
-  const loadGraphById = useCallback(async (graphId: string) => {
-    try {
-      const resp = await authedFetch(`${API_BASE}/api/graphs/${graphId}`);
-      if (!resp.ok) throw new Error(`加载图谱失败 (${resp.status})`);
       const data = await resp.json();
-      const kg = mapBackendGraph(
-        { nodes: data.nodes || [], relations: data.relations || [], topic: data.title },
-        {
-          courseName: data.title,
-          chapterName: data.source === 'aigc' ? 'AIGC 生成' : data.source === 'document' ? '文档抽取' : '示例图谱',
-          documentName: data.description || data.title,
-        },
-      );
+      if (!data || !Array.isArray(data.nodes)) return;
+      if (data.nodes.length === 0) {
+        // 该课程暂无图谱，清空而不是保留上一个课程/示例图谱的数据
+        setGraph(null);
+        setMasteredIds(new Set());
+        return;
+      }
+      const kg = mapBackendGraph(data, {
+        courseName: courseId !== null ? `课程 #${courseId}` : '全部课程',
+        chapterName: '课程图谱',
+        documentName: '—',
+      });
       setGraph(kg);
-      setCurrentGraphId(graphId);
       setMasteredIds(new Set());
-      setMessages(initialMessages);
-    } catch (e) {
-      console.error('loadGraphById error:', e);
+    } catch {
+      /* 忽略，保持现有图谱 */
     }
   }, []);
 
-  const deleteGraph = useCallback(async (graphId: string) => {
-    const resp = await authedFetch(`${API_BASE}/api/graphs/${graphId}`, { method: 'DELETE' });
-    if (!resp.ok) throw new Error(`删除失败 (${resp.status})`);
-    setGraphs((prev) => prev.filter((g) => g.id !== graphId));
-    // 如果删的是当前图谱，清空 graph
-    setCurrentGraphId((cur) => {
-      if (cur === graphId) {
-        setGraph(null);
-        return null;
-      }
-      return cur;
-    });
-  }, []);
+  // 供外部（如 AIGC 生成后）重新拉取当前课程的持久化图谱。
+  const reloadGraph = useCallback(() => loadGraph(currentCourseId), [loadGraph, currentCourseId]);
 
-  const renameGraph = useCallback(async (graphId: string, title: string, description?: string) => {
-    const body: any = { title };
-    if (description !== undefined) body.description = description;
-    const resp = await authedFetch(`${API_BASE}/api/graphs/${graphId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!resp.ok) throw new Error(`改名失败 (${resp.status})`);
-    const updated = await resp.json();
-    setGraphs((prev) => prev.map((g) => (g.id === graphId ? { ...g, ...updated } : g)));
-  }, []);
+  useEffect(() => {
+    let active = true;
+    // 课程切换时立即清空，避免短暂显示上一个课程的图谱数据
+    setGraph(null);
+    setMasteredIds(new Set());
+    loadGraph(currentCourseId).then(() => { if (!active) return; });
+    return () => { active = false; };
+  }, [currentCourseId, loadGraph]);
 
   // 开发辅助：允许浏览器端通过自定义事件注入后端拉取的真实图谱（用于端到端验收）
   useEffect(() => {
@@ -254,6 +305,7 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
       if (kg && Array.isArray(kg.nodes) && Array.isArray(kg.relations)) {
         setGraph(kg);
         setMasteredIds(new Set());
+        setQuizAttempts([]);
         setMessages(initialMessages);
       }
     }
@@ -333,12 +385,15 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
     }, 700);
 
     try {
-      let newGraphId: string | null = null;
+      let graphRespData: { nodes: any[]; relations: any[] } | null = null;
 
       if (file) {
         // 真实上传 + 解析
         const fd = new FormData();
         fd.append('file', file, file.name);
+        if (currentCourseId !== null) {
+          fd.append('course_id', String(currentCourseId));
+        }
         const resp = await authedFetch(`${API_BASE}/api/documents/upload`, {
           method: 'POST',
           body: fd,
@@ -347,33 +402,16 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
         if (!resp.ok) {
           throw new Error(body?.detail || `上传失败 (${resp.status})`);
         }
-        // 解析完成：后端为该文档创建了一份独立图谱，用 graph_id 加载
-        newGraphId = body?.graph_id || null;
-        if (newGraphId) {
-          await loadGraphById(newGraphId);
-          refreshGraphList();
-        } else {
-          // 兜底：后端未返回 graph_id 时拉取合并视图
-          const gResp = await authedFetch(`${API_BASE}/api/graph`);
-          if (!gResp.ok) throw new Error(`获取图谱失败 (${gResp.status})`);
-          const graphRespData = await gResp.json();
-          const kg = mapBackendGraph(
-            graphRespData ?? { nodes: [], relations: [] },
-            {
-              courseName: docName.replace(/\.[^.]+$/, ''),
-              chapterName: '上传解析',
-              documentName: docName,
-            },
-          );
-          setGraph(kg);
-          setMasteredIds(new Set());
-          setMessages(initialMessages);
-        }
+        // 解析完成：拉取当前课程的图谱
+        const gUrl = currentCourseId !== null
+          ? `${API_BASE}/api/graph?course_id=${currentCourseId}`
+          : `${API_BASE}/api/graph`;
+        const gResp = await authedFetch(gUrl);
+        if (!gResp.ok) throw new Error(`获取图谱失败 (${gResp.status})`);
+        graphRespData = await gResp.json();
       } else {
         // 如果找不到文件引用（不应该发生），回退旧 mock
-        setGraph(sampleKnowledgeGraph);
-        setMasteredIds(new Set());
-        setMessages(initialMessages);
+        graphRespData = sampleKnowledgeGraph;
       }
 
       // 进度条到 100%
@@ -382,6 +420,20 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
         prev.map((d) => (d.id === docId ? { ...d, status: 'parsing', progress: 90 } : d)),
       );
       await new Promise((r) => setTimeout(r, 300));
+
+      // 映射并设置图谱
+      const kg = mapBackendGraph(
+        graphRespData ?? { nodes: [], relations: [] },
+        {
+          courseName: docName.replace(/\.[^.]+$/, ''),
+          chapterName: '上传解析',
+          documentName: docName,
+        },
+      );
+      setGraph(kg);
+      setMasteredIds(new Set());
+      setQuizAttempts([]);
+      setMessages(initialMessages);
       setDocuments((prev) =>
         prev.map((d) => (d.id === docId ? { ...d, status: 'parsed', progress: 100 } : d)),
       );
@@ -395,7 +447,7 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
       );
       // 错误也提示给 graph 吗？这里保持不变，让用户在上传卡片上看到 error
     }
-  }, [documents, loadGraphById, refreshGraphList]);
+  }, [documents]);
 
   // ---------------- 加载示例图谱：真实调后端 /api/graph/seed-sample ----------------
   const loadSampleGraph = useCallback(async () => {
@@ -409,17 +461,14 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
         documentName: '示例数据集',
       });
       setGraph(kg);
-      // 示例图谱的 graph_id 固定为 sample-graph
-      setCurrentGraphId('sample-graph');
-      // 刷新图谱列表，让列表页也显示这份示例
-      refreshGraphList();
     } catch {
       // 后端不可达时回退内置 mock
       setGraph(sampleKnowledgeGraph);
     }
     setMasteredIds(new Set());
+    setQuizAttempts([]);
     setMessages(initialMessages);
-  }, [refreshGraphList]);
+  }, []);
 
   // 掌握状态
   const markAsMastered = useCallback(
@@ -446,12 +495,55 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const submitQuiz = useCallback((nodeId: string, correct: number, total: number) => {
+    const safeTotal = Math.max(1, total);
+    const safeCorrect = Math.max(0, Math.min(correct, safeTotal));
+    const attempt: QuizAttempt = {
+      id: `quiz_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      nodeId,
+      correct: safeCorrect,
+      total: safeTotal,
+      accuracy: Math.round((safeCorrect / safeTotal) * 100),
+      completedAt: new Date().toISOString(),
+    };
+    setQuizAttempts((previous) => [...previous, attempt]);
+    setMasteredIds((previous) => {
+      const next = new Set(previous);
+      if (attempt.accuracy >= 67) next.add(nodeId);
+      else next.delete(nodeId);
+      return next;
+    });
+    void persistQuizResult(nodeId, safeCorrect, safeTotal).then((remote) => {
+      if (!remote) return;
+      setQuizAttempts((previous) => previous.map((item) => item.id === attempt.id ? {
+        id: `api_${remote.id}`,
+        nodeId: remote.node_id,
+        correct: remote.correct_count,
+        total: remote.total_count,
+        accuracy: remote.accuracy,
+        completedAt: remote.completed_at,
+      } : item));
+    });
+    return attempt;
+  }, []);
+
+  const setLearningPreference = useCallback((preference: LearningPreference) => {
+    setLearningPreferenceState(preference);
+    void persistLearningPreference(preference);
+  }, []);
+
+  const weakNodeIds = useMemo(() => {
+    const latest = new Map<string, QuizAttempt>();
+    quizAttempts.forEach((attempt) => latest.set(attempt.nodeId, attempt));
+    return new Set([...latest.values()].filter((attempt) => attempt.accuracy < 67).map((attempt) => attempt.nodeId));
+  }, [quizAttempts]);
+
   // 推荐（在 graph/masteredIds 变化时自动计算）
   const { recommendations, stages: pathStages } = useMemo(() => {
     if (!graph) return { recommendations: [], stages: [] };
-    return buildRecommendations(graph, masteredIds);
+    return buildRecommendations(graph, masteredIds, quizAttempts, learningPreference);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph, masteredIds]);
+  }, [graph, masteredIds, quizAttempts, learningPreference]);
 
   const regenerateRecommendations = useCallback(() => {
     // 目前 useMemo 自动计算，这里保留 API 占位以便后续接后端
@@ -494,17 +586,85 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
 
   const clearChat = useCallback(() => setMessages(initialMessages), []);
 
+  const updateNode = useCallback((id: string, patch: Partial<KnowledgeNode>) => {
+    setGraph((current) => current ? { ...current, nodes: current.nodes.map((node) => node.id === id ? { ...node, ...patch, id } : node) } : current);
+    // 持久化到后端
+    const merged = graph?.nodes.find((n) => n.id === id);
+    if (merged) {
+      const node = { ...merged, ...patch, id };
+      authedFetch(`${API_BASE}/api/graph/nodes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: node.id,
+          name: node.name,
+          category: mapCategoryToZh(node.category),
+          description: node.description || node.definition || node.name,
+          difficulty: Number(node.importance ?? 3),
+          x: node.x ?? null,
+          y: node.y ?? null,
+        }),
+      }).catch(() => {});
+    }
+  }, [graph, authedFetch]);
+
+  const addNode = useCallback((node: Omit<KnowledgeNode, 'id'> & { id?: string }) => {
+    const id = node.id?.trim() || `custom_${Math.random().toString(36).slice(2, 9)}`;
+    setGraph((current) => current ? { ...current, nodes: [...current.nodes, { ...node, id }] } : current);
+    // 持久化到后端
+    authedFetch(`${API_BASE}/api/graph/nodes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        name: node.name,
+        category: mapCategoryToZh(node.category),
+        description: node.description || node.definition || node.name,
+        difficulty: Number(node.importance ?? 3),
+        x: node.x ?? null,
+        y: node.y ?? null,
+      }),
+    }).catch(() => {});
+    return id;
+  }, [authedFetch]);
+
+  const deleteNode = useCallback((id: string) => {
+    setGraph((current) => current ? { ...current, nodes: current.nodes.filter((node) => node.id !== id), relations: current.relations.filter((relation) => relation.source !== id && relation.target !== id) } : current);
+    setMasteredIds((current) => { const next = new Set(current); next.delete(id); return next; });
+    // 持久化到后端
+    authedFetch(`${API_BASE}/api/graph/nodes/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+  }, [authedFetch]);
+
+  const addRelation = useCallback((relation: Omit<import('../types').KnowledgeRelation, 'id'> & { id?: string }) => {
+    const id = relation.id?.trim() || `custom_rel_${Math.random().toString(36).slice(2, 9)}`;
+    setGraph((current) => current ? { ...current, relations: [...current.relations, { ...relation, id }] } : current);
+    // 持久化到后端
+    authedFetch(`${API_BASE}/api/graph/relations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        source: relation.source,
+        target: relation.target,
+        type: mapRelationTypeToZh(relation.type),
+        label: relation.label || mapRelationTypeToZh(relation.type),
+      }),
+    }).catch(() => {});
+    return id;
+  }, [authedFetch]);
+
+  const deleteRelation = useCallback((id: string) => {
+    setGraph((current) => current ? { ...current, relations: current.relations.filter((relation) => relation.id !== id) } : current);
+    // 持久化到后端
+    authedFetch(`${API_BASE}/api/graph/relations/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+  }, [authedFetch]);
+
   // 首次进入时：如无任何图谱，暂不自动加载；由上传页触发
 
   const value: KnowledgeContextValue = {
     graph,
     hasGraph,
-    currentGraphId,
-    graphs,
-    refreshGraphList,
-    loadGraphById,
-    deleteGraph,
-    renameGraph,
+    reloadGraph,
     documents,
     addDocument,
     triggerParse,
@@ -513,12 +673,24 @@ export function KnowledgeProvider({ children }: { children: React.ReactNode }) {
     markAsMastered,
     markAsNotMastered,
     toggleMastered,
+    quizAttempts,
+    weakNodeIds,
+    submitQuiz,
+    learningPreference,
+    setLearningPreference,
     recommendations,
     pathStages,
     regenerateRecommendations,
     messages,
     sendQuestion,
     clearChat,
+    learningNode,
+    setLearningNode,
+    updateNode,
+    addNode,
+    deleteNode,
+    addRelation,
+    deleteRelation,
   };
 
   return <KnowledgeContext.Provider value={value}>{children}</KnowledgeContext.Provider>;

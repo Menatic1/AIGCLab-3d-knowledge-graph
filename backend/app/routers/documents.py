@@ -5,11 +5,10 @@ import os
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from .. import models, schemas
-from ..auth import get_current_user
 from ..config import settings
 from ..database import get_db
 from ..llm_client import extract_knowledge_graph
@@ -23,28 +22,21 @@ def _ensure_upload_dir():
 
 
 @router.get("", response_model=list[schemas.DocumentOut])
-def list_documents(
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
-    docs = (
-        db.query(models.Document)
-        .filter(models.Document.user_id == user.id)
-        .order_by(models.Document.created_at.desc())
-        .all()
-    )
+def list_documents(db: Session = Depends(get_db)):
+    docs = db.query(models.Document).order_by(models.Document.created_at.desc()).all()
     return docs
 
 
-@router.post("/upload", response_model=schemas.ExtractTaskOut)
-async def upload_document(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
+async def _upload_document_impl(
+    file: UploadFile,
+    db: Session,
+    *,
+    course_id: int | None = None,
+    user_id: str = "default",
+) -> schemas.ExtractTaskOut:
     """上传并直接解析 + 抽取知识图谱（同步返回结果）。
 
-    每份文档对应一份独立的知识图谱，节点 ID 加 graph_id 前缀避免跨图谱冲突。
+    解析失败返回 status=error，抽取依然会用离线 fallback 以保证不中断流程。
     """
     _ensure_upload_dir()
     filename = file.filename or f"upload_{uuid.uuid4().hex[:8]}"
@@ -60,7 +52,8 @@ async def upload_document(
 
     size_bytes = len(content)
     doc = models.Document(
-        user_id=user.id,
+        user_id=user_id,
+        course_id=course_id,
         filename=filename,
         stored_path=stored_path,
         content_type=file.content_type,
@@ -96,88 +89,79 @@ async def upload_document(
         db.commit()
         return schemas.ExtractTaskOut(
             document_id=doc.id, extract_status=doc.extract_status, error_msg=doc.error_msg,
-            graph_id=None,
         )
 
-    # 3) 创建一份独立的图谱元数据记录
-    graph_id = uuid.uuid4().hex
-    g = models.KnowledgeGraph(
-        id=graph_id,
-        user_id=user.id,
-        title=filename,
-        source="document",
-        source_ref=str(doc.id),
-        description=f"由文档「{filename}」抽取得到的知识图谱",
-        nodes_count=len(result.nodes),
-        relations_count=len(result.relations),
-    )
-    db.add(g)
-    db.commit()
+    # Course scoped graphs use globally unique ids so records from two courses
+    # can never overwrite one another in the legacy single-column schema.
+    id_prefix = f"c{course_id}_" if course_id is not None else ""
+    nodes = [
+        {**node, "id": f"{id_prefix}{node['id']}"}
+        for node in result.nodes
+    ]
+    source_ids = {node["id"]: f"{id_prefix}{node['id']}" for node in result.nodes}
+    relations = [
+        {
+            **relation,
+            "id": f"{id_prefix}{relation['id']}",
+            "source": source_ids.get(relation["source"], f"{id_prefix}{relation['source']}"),
+            "target": source_ids.get(relation["target"], f"{id_prefix}{relation['target']}"),
+        }
+        for relation in result.relations
+    ]
 
-    # 4) 写入数据库（节点 ID 加前缀避免跨图谱冲突）
-    prefix = f"{graph_id[:8]}_"
-    id_map: dict[str, str] = {}  # 原始 id -> 加前缀后的全局唯一 id
+    # 3) 写入数据库（按 id upsert：先查存在就合并，否则插入）
     node_map: dict[str, models.KGNode] = {}
-    for n in result.nodes:
-        new_id = f"{prefix}{n['id']}"
-        id_map[n["id"]] = new_id
-        existing = db.query(models.KGNode).filter(models.KGNode.id == new_id).first()
+    for n in nodes:
+        existing = db.query(models.KGNode).filter(models.KGNode.id == n["id"]).first()
         if existing:
             existing.name = n["name"]
             existing.category = n["category"]
             existing.description = n["description"]
             existing.difficulty = float(n.get("difficulty") or existing.difficulty)
             existing.document_id = doc.id
-            existing.graph_id = graph_id
-            existing.user_id = user.id
+            existing.course_id = course_id
+            existing.user_id = user_id
             node_map[existing.id] = existing
         else:
             obj = models.KGNode(
-                id=new_id,
+                id=n["id"],
                 name=n["name"],
                 category=n["category"],
                 description=n["description"],
                 difficulty=float(n.get("difficulty") or 3.0),
                 document_id=doc.id,
-                graph_id=graph_id,
-                user_id=user.id,
+                course_id=course_id,
+                user_id=user_id,
             )
             db.add(obj)
             node_map[obj.id] = obj
     db.flush()
 
     inserted_rel = 0
-    for r in result.relations:
-        src = id_map.get(r["source"])
-        tgt = id_map.get(r["target"])
-        if not src or not tgt:
+    for r in relations:
+        if r["source"] not in node_map or r["target"] not in node_map:
             continue
-        new_rel_id = f"{prefix}{r['id']}"
-        existing = db.query(models.KGRelation).filter(models.KGRelation.id == new_rel_id).first()
+        existing = db.query(models.KGRelation).filter(models.KGRelation.id == r["id"]).first()
         if existing:
             existing.type = r["type"]
             existing.label = r["label"]
             existing.document_id = doc.id
-            existing.graph_id = graph_id
-            existing.user_id = user.id
+            existing.course_id = course_id
+            existing.user_id = user_id
         else:
             rel = models.KGRelation(
-                id=new_rel_id,
-                source=src,
-                target=tgt,
+                id=r["id"],
+                source=r["source"],
+                target=r["target"],
                 type=r["type"],
                 label=r["label"],
                 document_id=doc.id,
-                graph_id=graph_id,
-                user_id=user.id,
+                course_id=course_id,
+                user_id=user_id,
             )
             db.add(rel)
             inserted_rel += 1
     db.commit()
-
-    # 重新统计图谱计数
-    from .graphs import _refresh_counts
-    _refresh_counts(db, graph_id)
 
     doc.extract_status = "done"
     doc.error_msg = None
@@ -186,54 +170,34 @@ async def upload_document(
     return schemas.ExtractTaskOut(
         document_id=doc.id,
         extract_status=doc.extract_status,
-        nodes_count=len(result.nodes),
-        relations_count=len(result.relations),
-        error_msg=None,
-        graph_id=graph_id,
+        nodes_count=len(nodes),
+        relations_count=len(relations),
     )
 
 
-@router.get("/{doc_id}", response_model=schemas.DocumentOut)
-def get_document(
-    doc_id: int,
+@router.post("/upload", response_model=schemas.ExtractTaskOut)
+async def upload_document(
+    file: UploadFile = File(...),
+    course_id: int | None = Form(None, description="课程 ID"),
     db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
 ):
-    doc = db.query(models.Document).filter(
-        models.Document.id == doc_id, models.Document.user_id == user.id
-    ).first()
+    return await _upload_document_impl(file, db, course_id=course_id)
+
+
+@router.get("/{doc_id}", response_model=schemas.DocumentOut)
+def get_document(doc_id: int, db: Session = Depends(get_db)):
+    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
     if not doc:
         raise HTTPException(404, "文档不存在")
     return doc
 
 
 @router.delete("/{doc_id}")
-def delete_document(
-    doc_id: int,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
-    doc = db.query(models.Document).filter(
-        models.Document.id == doc_id, models.Document.user_id == user.id
-    ).first()
+def delete_document(doc_id: int, db: Session = Depends(get_db)):
+    doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
     if not doc:
         raise HTTPException(404, "文档不存在")
-    # 同时删除该文档对应的图谱（按 source_ref=doc_id 找）
-    graphs = db.query(models.KnowledgeGraph).filter(
-        models.KnowledgeGraph.source == "document",
-        models.KnowledgeGraph.source_ref == str(doc_id),
-    ).all()
-    for g in graphs:
-        node_ids = [n.id for n in db.query(models.KGNode)
-                    .filter(models.KGNode.graph_id == g.id).all()]
-        if node_ids:
-            db.query(models.UserProgress).filter(
-                models.UserProgress.node_id.in_(node_ids)
-            ).delete(synchronize_session=False)
-        db.query(models.KGNode).filter(models.KGNode.graph_id == g.id).delete(synchronize_session=False)
-        db.query(models.KGRelation).filter(models.KGRelation.graph_id == g.id).delete(synchronize_session=False)
-        db.delete(g)
-    # 兜底：按 document_id 删一遍
+    # 只删除本文档贡献的节点/关系（其他文档抽取的保留）
     for n in db.query(models.KGNode).filter(models.KGNode.document_id == doc_id).all():
         db.delete(n)
     for r in db.query(models.KGRelation).filter(models.KGRelation.document_id == doc_id).all():

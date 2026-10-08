@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { size: 1654px 2339px; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 1654px;
+    height: 2339px;
+    overflow: hidden;
+    font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+  }
+
+  /* ═════════ 底色：多层大气透视 ═════════ */
+  .cover {
+    position: relative;
+    width: 1654px;
+    height: 2339px;
+    background:
+      /* 顶部光源 */
+      radial-gradient(ellipse 900px 600px at 50% 8%, rgba(180,210,250,0.14) 0%, rgba(180,210,250,0) 50%),
+      /* 左侧暖光 */
+      radial-gradient(ellipse 500px 800px at 12% 45%, rgba(200,170,120,0.07) 0%, rgba(200,170,120,0) 50%),
+      /* 右下冷光 */
+      radial-gradient(ellipse 600px 700px at 88% 75%, rgba(80,130,200,0.10) 0%, rgba(80,130,200,0) 50%),
+      /* 底部暗角 */
+      radial-gradient(ellipse 1400px 500px at 50% 100%, rgba(0,8,25,0.45) 0%, rgba(0,8,25,0) 65%),
+      /* 主渐变 */
+      linear-gradient(165deg, #0d2138 0%, #122c4a 28%, #163560 50%, #0e2342 78%, #0a1830 100%);
+    overflow: hidden;
+  }
+
+  /* ═════════ 工程网格（细+粗+透视感） ═════════ */
+  .grid-fine {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(160,200,240,0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(160,200,240,0.07) 1px, transparent 1px);
+    background-size: 33px 33px;
+  }
+  .grid-bold {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(160,200,240,0.12) 1.5px, transparent 1.5px),
+      linear-gradient(90deg, rgba(160,200,240,0.12) 1.5px, transparent 1.5px);
+    background-size: 165px 165px;
+  }
+  /* 网格中心淡出效果 */
+  .grid-mask {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 1100px 1000px at 50% 48%, rgba(10,24,48,0.55) 0%, rgba(10,24,48,0) 55%);
+  }
+
+  /* ═════════ 纸张纤维质感 ═════════ */
+  .grain {
+    position: absolute; inset: 0;
+    opacity: 0.6;
+    mix-blend-mode: overlay;
+    background-image:
+      radial-gradient(circle at 8% 18%, rgba(255,255,255,0.06) 0 1.5px, transparent 2.5px),
+      radial-gradient(circle at 72% 8%, rgba(255,255,255,0.05) 0 1.5px, transparent 2.5px),
+      radial-gradient(circle at 28% 62%, rgba(0,0,0,0.07) 0 2px, transparent 3px),
+      radial-gradient(circle at 85% 68%, rgba(0,0,0,0.06) 0 2px, transparent 3px),
+      radial-gradient(circle at 48% 38%, rgba(255,255,255,0.04) 0 1px, transparent 2px),
+      radial-gradient(circle at 62% 82%, rgba(0,0,0,0.05) 0 1.5px, transparent 2.5px),
+      radial-gradient(circle at 15% 88%, rgba(255,255,255,0.03) 0 1px, transparent 2px);
+  }
+
+  /* ═════════ 顶部装饰檐口 ═════════ */
+  .cornice {
+    position: absolute; top: 0; left: 0; right: 0; height: 130px;
+    background: linear-gradient(180deg, rgba(255,235,190,0.18) 0%, rgba(255,235,190,0.04) 60%, rgba(255,235,190,0) 100%);
+  }
+  .cornice-band {
+    position: absolute; top: 50px; left: 0; right: 0; height: 36px;
+    border-top: 1px solid rgba(212,175,95,0.42);
+    border-bottom: 1px solid rgba(212,175,95,0.42);
+  }
+  .cornice-ticks {
+    position: absolute; top: 50px; left: 0; right: 0; height: 36px;
+    background-image: repeating-linear-gradient(90deg,
+      rgba(212,175,95,0.48) 0 1px, transparent 1px 12px);
+    opacity: 0.5;
+  }
+  /* 顶部图纸编号 */
+  .dwg-id {
+    position: absolute; top: 62px; left: 72px;
+    font-family: "Times New Roman", serif;
+    font-size: 14px; letter-spacing: 3px;
+    color: rgba(212,175,95,0.6);
+  }
+  .dwg-id-r {
+    position: absolute; top: 62px; right: 72px;
+    font-family: "Times New Roman", serif;
+    font-size: 14px; letter-spacing: 3px;
+    color: rgba(212,175,95,0.6);
+  }
+
+  /* ═════════ 内描边画框（双层） ═════════ */
+  .frame {
+    position: absolute; inset: 42px;
+    border: 2px solid rgba(212,175,95,0.28);
+    pointer-events: none;
+  }
+  .frame::after {
+    content: ""; position: absolute; inset: 14px;
+    border: 1px solid rgba(212,175,95,0.15);
+  }
+  .corner {
+    position: absolute; width: 52px; height: 52px;
+    border-color: rgba(224,190,110,0.65);
+  }
+  .corner.tl { top: 42px; left: 42px; border-top: 3px solid; border-left: 3px solid; }
+  .corner.tr { top: 42px; right: 42px; border-top: 3px solid; border-right: 3px solid; }
+  .corner.bl { bottom: 42px; left: 42px; border-bottom: 3px solid; border-left: 3px solid; }
+  .corner.br { bottom: 42px; right: 42px; border-bottom: 3px solid; border-right: 3px solid; }
+  /* 角部装饰花纹 */
+  .corner-orn {
+    position: absolute; width: 80px; height: 80px;
+    opacity: 0.25;
+  }
+  .corner-orn.tl { top: 42px; left: 42px; }
+  .corner-orn.tr { top: 42px; right: 42px; transform: scaleX(-1); }
+  .corner-orn.bl { bottom: 42px; left: 42px; transform: scaleY(-1); }
+  .corner-orn.br { bottom: 42px; right: 42px; transform: scale(-1,-1); }
+
+  /* ═════════ 标题区 ═════════ */
+  .head { position: absolute; top: 240px; left: 0; right: 0; text-align: center; z-index: 10; }
+
+  .eyebrow {
+    display: inline-block;
+    font-size: 24px; letter-spacing: 14px; text-indent: 14px;
+    color: #cfe4f8; font-weight: 400;
+    padding: 10px 34px;
+    border: 1px solid rgba(180,214,246,0.35);
+    border-radius: 3px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.1);
+  }
+
+  /* 烫金主标题：多层叠压 */
+  .title-wrap {
+    margin-top: 44px;
+    position: relative;
+    display: inline-block;
+  }
+  .title {
+    font-family: "STZhongsong", "华文中宋", "SimSun", "宋体", serif;
+    font-size: 248px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 18px;
+    text-indent: 18px;
+    background: linear-gradient(180deg,
+      #fff8e0 0%, #f5dc8a 18%, #d8a940 38%,
+      #b07d22 52%, #d8a940 66%, #f5dc8a 82%, #fff8e0 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    /* 多层投影：金属厚度感 + 环境光 */
+    filter:
+      drop-shadow(0 2px 0 rgba(60,35,8,0.7))
+      drop-shadow(0 5px 0 rgba(50,28,6,0.5))
+      drop-shadow(0 8px 4px rgba(30,15,3,0.4))
+      drop-shadow(0 14px 28px rgba(0,0,0,0.45))
+      drop-shadow(0 0 60px rgba(210,170,80,0.15));
+  }
+
+  .subtitle {
+    margin-top: 32px;
+    font-size: 50px;
+    font-weight: 400;
+    letter-spacing: 8px;
+    text-indent: 8px;
+    color: #e8f0fa;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.4), 0 0 24px rgba(180,210,250,0.1);
+  }
+  .subtitle-en {
+    margin-top: 14px;
+    font-size: 20px;
+    letter-spacing: 5px;
+    color: rgba(200,225,250,0.6);
+    font-family: "Times New Roman", serif;
+  }
+
+  /* 标题下分隔线 */
+  .head-divider {
+    margin: 38px auto 0;
+    width: 420px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(224,190,110,0.55), transparent);
+  }
+  .head-divider::before {
+    content: ""; display: block; margin: 0 auto;
+    width: 8px; height: 8px; transform: translateY(-4px) rotate(45deg);
+    background: rgba(224,190,110,0.7);
+    box-shadow: 0 0 12px rgba(224,190,110,0.3);
+  }
+
+  /* ═════════ 图谱区 ═════════ */
+  .graph-wrap {
+    position: absolute; top: 830px; left: 50%;
+    transform: translateX(-50%);
+    width: 1380px; height: 1060px;
+  }
+  .graph-wrap svg { width: 100%; height: 100%; }
+
+  /* 图谱区标注线 */
+  .annot {
+    position: absolute;
+    font-family: "Times New Roman", serif;
+    font-size: 13px; letter-spacing: 2px;
+    color: rgba(180,214,246,0.4);
+  }
+  .annot-l { top: 870px; left: 64px; }
+  .annot-r { top: 870px; right: 64px; text-align: right; }
+  .annot-line {
+    position: absolute;
+    background: rgba(180,214,246,0.2);
+  }
+
+  /* ═════════ 底部信息 ═════════ */
+  .foot {
+    position: absolute; bottom: 120px; left: 0; right: 0;
+    text-align: center;
+    z-index: 10;
+  }
+  .foot-rule {
+    margin: 0 auto 28px;
+    width: 320px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(224,190,110,0.5), transparent);
+  }
+  .version {
+    display: inline-block;
+    font-family: "Times New Roman", serif;
+    font-size: 38px; letter-spacing: 8px;
+    color: #e8c878;
+    padding: 8px 36px;
+    border: 1px solid rgba(224,190,110,0.4);
+    border-radius: 3px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.08));
+    text-shadow: 0 0 20px rgba(224,190,110,0.2);
+  }
+  .org {
+    margin-top: 24px;
+    font-size: 22px; letter-spacing: 10px; text-indent: 10px;
+    color: rgba(200,225,250,0.7);
+  }
+  .org-en {
+    margin-top: 10px;
+    font-size: 14px; letter-spacing: 3px;
+    color: rgba(180,210,250,0.4);
+    font-family: "Times New Roman", serif;
+  }
+
+  /* ═════════ 底部制图标注 ═════════ */
+  .scale-bar {
+    position: absolute; bottom: 52px; left: 72px;
+    display: flex; align-items: center; gap: 0;
+  }
+  .scale-bar div {
+    width: 30px; height: 10px;
+    border: 1px solid rgba(212,175,95,0.4);
+  }
+  .scale-bar div:nth-child(odd) { background: rgba(212,175,95,0.25); }
+  .scale-text {
+    margin-left: 10px;
+    font-family: "Times New Roman", serif;
+    font-size: 13px; letter-spacing: 2px;
+    color: rgba(212,175,95,0.5);
+  }
+
+  .north-arrow {
+    position: absolute; bottom: 52px; right: 72px;
+    width: 50px; height: 50px;
+  }
+
+  /* ═════════ 浮光粒子 ═════════ */
+  .particles { position: absolute; inset: 0; pointer-events: none; opacity: 0.5; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <div class="grid-fine"></div>
+  <div class="grid-bold"></div>
+  <div class="grid-mask"></div>
+  <div class="grain"></div>
+
+  <div class="cornice"></div>
+  <div class="cornice-band"></div>
+  <div class="cornice-ticks"></div>
+  <div class="dwg-id">DWG-A10-KG-001</div>
+  <div class="dwg-id-r">SHEET 01 / 01</div>
+
+  <div class="frame"></div>
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+
+  <!-- 角部装饰花纹 -->
+  <svg class="corner-orn tl" viewBox="0 0 80 80" fill="none" stroke="#d4af5f" stroke-width="1.2" stroke-linecap="round">
+    <path d="M8 8 L8 40 M8 8 L40 8"/>
+    <path d="M14 14 C24 14, 24 24, 14 24 M14 14 C14 24, 24 24, 24 14"/>
+    <circle cx="14" cy="14" r="2.5" fill="#d4af5f" stroke="none"/>
+    <path d="M30 8 C30 18, 40 18, 40 8"/>
+    <path d="M8 30 C18 30, 18 40, 8 40"/>
+  </svg>
+  <svg class="corner-orn tr" viewBox="0 0 80 80" fill="none" stroke="#d4af5f" stroke-width="1.2" stroke-linecap="round">
+    <path d="M8 8 L8 40 M8 8 L40 8"/>
+    <path d="M14 14 C24 14, 24 24, 14 24 M14 14 C14 24, 24 24, 24 14"/>
+    <circle cx="14" cy="14" r="2.5" fill="#d4af5f" stroke="none"/>
+    <path d="M30 8 C30 18, 40 18, 40 8"/>
+    <path d="M8 30 C18 30, 18 40, 8 40"/>
+  </svg>
+  <svg class="corner-orn bl" viewBox="0 0 80 80" fill="none" stroke="#d4af5f" stroke-width="1.2" stroke-linecap="round">
+    <path d="M8 8 L8 40 M8 8 L40 8"/>
+    <path d="M14 14 C24 14, 24 24, 14 24 M14 14 C14 24, 24 24, 24 14"/>
+    <circle cx="14" cy="14" r="2.5" fill="#d4af5f" stroke="none"/>
+    <path d="M30 8 C30 18, 40 18, 40 8"/>
+    <path d="M8 30 C18 30, 18 40, 8 40"/>
+  </svg>
+  <svg class="corner-orn br" viewBox="0 0 80 80" fill="none" stroke="#d4af5f" stroke-width="1.2" stroke-linecap="round">
+    <path d="M8 8 L8 40 M8 8 L40 8"/>
+    <path d="M14 14 C24 14, 24 24, 14 24 M14 14 C14 24, 24 24, 24 14"/>
+    <circle cx="14" cy="14" r="2.5" fill="#d4af5f" stroke="none"/>
+    <path d="M30 8 C30 18, 40 18, 40 8"/>
+    <path d="M8 30 C18 30, 18 40, 8 40"/>
+  </svg>
+
+  <div class="head">
+    <div class="eyebrow">AIGC · 知识图谱 · 智能导学</div>
+    <div class="title-wrap">
+      <div class="title">智绘千里</div>
+    </div>
+    <div class="subtitle">AIGC 知识图谱智能导学系统</div>
+    <div class="subtitle-en">AI-DRIVEN KNOWLEDGE GRAPH LEARNING NAVIGATION</div>
+    <div class="head-divider"></div>
+  </div>
+
+  <!-- 图谱区标注 -->
+  <div class="annot annot-l">FIG. 01 — KNOWLEDGE TOPOLOGY</div>
+  <div class="annot annot-r">N=238 · E=341 · SCALE 1:100</div>
+
+  <!-- 知识图谱主体（代码绘制） -->
+  <div class="graph-wrap">
+    <svg id="kg" viewBox="0 0 1200 940"></svg>
+  </div>
+
+  <!-- 浮光粒子 -->
+  <svg class="particles" viewBox="0 0 1654 2339">
+    <circle cx="200" cy="500" r="2" fill="#a0c8f0" opacity="0.4"/>
+    <circle cx="1450" cy="700" r="1.5" fill="#d4af5f" opacity="0.3"/>
+    <circle cx="300" cy="1500" r="2" fill="#a0c8f0" opacity="0.35"/>
+    <circle cx="1350" cy="1700" r="1.5" fill="#a0c8f0" opacity="0.4"/>
+    <circle cx="800" cy="200" r="1" fill="#d4af5f" opacity="0.5"/>
+    <circle cx="600" cy="2200" r="1.5" fill="#a0c8f0" opacity="0.3"/>
+    <circle cx="1200" cy="2000" r="2" fill="#d4af5f" opacity="0.25"/>
+    <circle cx="100" cy="1200" r="1" fill="#a0c8f0" opacity="0.4"/>
+    <circle cx="1550" cy="1100" r="1.5" fill="#d4af5f" opacity="0.3"/>
+    <circle cx="400" cy="300" r="1" fill="#a0c8f0" opacity="0.35"/>
+  </svg>
+
+  <div class="foot">
+    <div class="foot-rule"></div>
+    <div class="version">V 1.0.0</div>
+    <div class="org">智绘千里团队 · 出品</div>
+    <div class="org-en">ZHIHUI QIANLI TEAM</div>
+  </div>
+
+  <!-- 底部比例尺 -->
+  <div class="scale-bar">
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+    <span class="scale-text">0 — 180 px</span>
+  </div>
+
+  <!-- 指北针 -->
+  <svg class="north-arrow" viewBox="0 0 50 50" fill="none" stroke="#d4af5f" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="25" cy="25" r="22" opacity="0.4"/>
+    <circle cx="25" cy="25" r="16" opacity="0.3"/>
+    <path d="M25 6 L20 25 L25 20 L30 25 Z" fill="#d4af5f" stroke="none" opacity="0.8"/>
+    <path d="M25 44 L20 25 L25 30 L30 25 Z" fill="none" opacity="0.4"/>
+    <text x="25" y="5" text-anchor="middle" font-size="7" fill="#d4af5f" font-family="Times New Roman" opacity="0.7">N</text>
+  </svg>
+</div>
+
+<script>
+// ═════════ 高级知识图谱绘制 ═════════
+const NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("kg");
+const W = 1200, H = 940;
+
+function el(tag, attrs) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+}
+
+// 伪随机
+let seed = 20260810;
+function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+
+// 贝塞尔曲线路径生成
+function bezierPath(x1, y1, x2, y2, curvature) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  // 垂直方向偏移控制点
+  const nx = -dy / dist, ny = dx / dist;
+  const offset = dist * curvature * (rnd() - 0.5) * 2;
+  const cx = mx + nx * offset, cy = my + ny * offset;
+  return `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`;
+}
+
+// 节点定义
+const center = { x: 600, y: 470 };
+const nodes = [
+  // 中心核心
+  { id: 0, x: 600, y: 470, r: 42, type: 'hex', glow: true, root: true },
+  // 内环
+  { id: 1, x: 430, y: 350, r: 31, type: 'circle', glow: true },
+  { id: 2, x: 770, y: 345, r: 29, type: 'hex', glow: true },
+  { id: 3, x: 390, y: 590, r: 27, type: 'circle' },
+  { id: 4, x: 800, y: 605, r: 31, type: 'circle', glow: true },
+  { id: 5, x: 585, y: 240, r: 25, type: 'hex' },
+  { id: 6, x: 610, y: 710, r: 27, type: 'hex', glow: true },
+  // 中环
+  { id: 7,  x: 250, y: 255, r: 21, type: 'circle' },
+  { id: 8,  x: 310, y: 155, r: 17, type: 'hex' },
+  { id: 9,  x: 920, y: 240, r: 21, type: 'circle' },
+  { id: 10, x: 1030, y: 360, r: 17, type: 'circle' },
+  { id: 11, x: 200, y: 470, r: 19, type: 'hex' },
+  { id: 12, x: 970, y: 520, r: 21, type: 'hex' },
+  { id: 13, x: 1025, y: 670, r: 17, type: 'circle' },
+  { id: 14, x: 840, y: 770, r: 21, type: 'circle' },
+  { id: 15, x: 660, y: 840, r: 17, type: 'hex' },
+  { id: 16, x: 440, y: 815, r: 21, type: 'circle' },
+  { id: 17, x: 250, y: 730, r: 17, type: 'hex' },
+  { id: 18, x: 145, y: 625, r: 14, type: 'circle' },
+  { id: 19, x: 940, y: 145, r: 14, type: 'circle' },
+  { id: 20, x: 720, y: 145, r: 14, type: 'hex' },
+  { id: 21, x: 160, y: 345, r: 13, type: 'circle' },
+  // 远景小节点（模糊层）
+  { id: 22, x: 490, y: 145, r: 9, type: 'dot', far: true },
+  { id: 23, x: 1090, y: 490, r: 9, type: 'dot', far: true },
+  { id: 24, x: 340, y: 910, r: 9, type: 'dot', far: true },
+  { id: 25, x: 580, y: 110, r: 9, type: 'dot', far: true },
+  { id: 26, x: 100, y: 150, r: 7, type: 'dot', far: true },
+  { id: 27, x: 1120, y: 750, r: 7, type: 'dot', far: true },
+  { id: 28, x: 700, y: 890, r: 7, type: 'dot', far: true },
+  { id: 29, x: 80, y: 420, r: 6, type: 'dot', far: true },
+];
+
+const edges = [
+  [0,1,'c'],[0,2,'c'],[0,3,'c'],[0,4,'c'],[0,5,'c'],[0,6,'c'],
+  [1,7,'c'],[1,11,'c'],[1,21,'c'],[1,5,'p'],
+  [2,9,'c'],[2,12,'c'],[2,20,'p'],
+  [3,11,'p'],[3,17,'c'],[3,16,'c'],
+  [4,12,'c'],[4,13,'c'],[4,14,'c'],
+  [5,8,'c'],[5,22,'r'],[5,25,'r'],
+  [6,15,'c'],[6,16,'c'],[6,14,'r'],
+  [7,8,'p'],[7,21,'r'],
+  [9,19,'p'],[9,10,'c'],
+  [10,23,'r'],[10,12,'r'],
+  [11,18,'c'],[11,21,'r'],
+  [12,13,'r'],[13,23,'c'],
+  [14,15,'r'],[15,24,'c'],
+  [16,17,'p'],[17,18,'r'],[17,24,'r'],
+  [18,21,'r'],[19,20,'r'],
+  [22,25,'r'],[22,8,'r'],
+  [24,28,'r'],[26,29,'r'],[27,23,'r'],
+];
+
+const edgeStyle = {
+  c: { color: 'rgba(150,205,250,0.48)', dash: 'none', width: 2.0, opacity: 0.85 },
+  p: { color: 'rgba(243,217,143,0.55)', dash: '10 7', width: 2.0, opacity: 0.8 },
+  r: { color: 'rgba(255,255,255,0.25)', dash: '3 6', width: 1.5, opacity: 0.6 },
+};
+
+// ═════════ SVG 定义：渐变 / 滤镜 / 蒙版 ═════════
+const defs = el('defs', {});
+defs.innerHTML = `
+  <!-- 蓝色光晕 -->
+  <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="#9fd8ff" stop-opacity="0.7"/>
+    <stop offset="40%" stop-color="#63b6ef" stop-opacity="0.25"/>
+    <stop offset="100%" stop-color="#3f7ba0" stop-opacity="0"/>
+  </radialGradient>
+  <!-- 金色光晕 -->
+  <radialGradient id="haloGold" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="#ffe9b0" stop-opacity="0.65"/>
+    <stop offset="50%" stop-color="#e2b45c" stop-opacity="0.22"/>
+    <stop offset="100%" stop-color="#b8892f" stop-opacity="0"/>
+  </radialGradient>
+  <!-- 蓝色节点渐变（更立体） -->
+  <radialGradient id="nodeBlue" cx="35%" cy="30%" r="70%">
+    <stop offset="0%" stop-color="#f0f8ff"/>
+    <stop offset="30%" stop-color="#b8ddf5"/>
+    <stop offset="65%" stop-color="#6eb0db"/>
+    <stop offset="100%" stop-color="#3a7ba0"/>
+  </radialGradient>
+  <!-- 金色节点渐变（更立体） -->
+  <radialGradient id="nodeGold" cx="35%" cy="30%" r="70%">
+    <stop offset="0%" stop-color="#fff8e0"/>
+    <stop offset="30%" stop-color="#f5d98a"/>
+    <stop offset="65%" stop-color="#d4a548"/>
+    <stop offset="100%" stop-color="#a07820"/>
+  </radialGradient>
+  <!-- 节点描边渐变 -->
+  <linearGradient id="strokeBlue" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="rgba(220,240,255,0.9)"/>
+    <stop offset="100%" stop-color="rgba(120,180,230,0.4)"/>
+  </linearGradient>
+  <linearGradient id="strokeGold" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="rgba(255,248,224,0.95)"/>
+    <stop offset="100%" stop-color="rgba(200,160,80,0.5)"/>
+  </linearGradient>
+  <!-- 模糊滤镜（远景层） -->
+  <filter id="blurFar" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur stdDeviation="4"/>
+  </filter>
+  <!-- 节点发光滤镜 -->
+  <filter id="nodeGlow" x="-80%" y="-80%" width="260%" height="260%">
+    <feGaussianBlur stdDeviation="3.5" result="blur"/>
+    <feMerge>
+      <feMergeNode in="blur"/>
+      <feMergeNode in="SourceGraphic"/>
+    </feMerge>
+  </filter>
+  <!-- 中心脉冲圈 -->
+  <radialGradient id="pulseRing" cx="50%" cy="50%" r="50%">
+    <stop offset="70%" stop-color="#d4af5f" stop-opacity="0"/>
+    <stop offset="85%" stop-color="#d4af5f" stop-opacity="0.4"/>
+    <stop offset="100%" stop-color="#d4af5f" stop-opacity="0"/>
+  </radialGradient>
+`;
+svg.appendChild(defs);
+
+const nodeById = {};
+nodes.forEach(n => nodeById[n.id] = n);
+
+// ═════════ 0) 远景模糊层（背景节点+连线） ═════════
+const farNodes = nodes.filter(n => n.far);
+const farIds = new Set(farNodes.map(n => n.id));
+const farEdges = edges.filter(([a, b]) => farIds.has(a) || farIds.has(b));
+
+const farGroup = el('g', { filter: 'url(#blurFar)', opacity: '0.4' });
+// 远景连线
+farEdges.forEach(([a, b, t]) => {
+  const A = nodeById[a], B = nodeById[b];
+  const s = edgeStyle[t];
+  const path = el('path', {
+    d: bezierPath(A.x, A.y, B.x, B.y, 0.15),
+    stroke: s.color, 'stroke-width': s.width * 0.7,
+    'stroke-linecap': 'round', fill: 'none',
+    opacity: s.opacity * 0.5,
+  });
+  if (s.dash !== 'none') path.setAttribute('stroke-dasharray', s.dash);
+  farGroup.appendChild(path);
+});
+// 远景节点
+farNodes.forEach(n => {
+  farGroup.appendChild(el('circle', {
+    cx: n.x, cy: n.y, r: n.r,
+    fill: 'url(#nodeBlue)', opacity: 0.5,
+  }));
+});
+svg.appendChild(farGroup);
+
+// ═════════ 1) 中心脉冲光圈 ═════════
+const pulseRing = el('circle', {
+  cx: nodes[0].x, cy: nodes[0].y, r: 120,
+  fill: 'url(#pulseRing)',
+});
+svg.appendChild(pulseRing);
+
+// ═════════ 2) 发光光晕（底层） ═════════
+nodes.filter(n => n.glow).forEach(n => {
+  const halo = el('circle', {
+    cx: n.x, cy: n.y, r: n.r * 3.2,
+    fill: n.type === 'hex' ? 'url(#haloGold)' : 'url(#halo)',
+  });
+  svg.appendChild(halo);
+});
+
+// ═════════ 3) 连线（贝塞尔曲线） ═════════
+const nearEdges = edges.filter(([a, b]) => !farIds.has(a) || !farIds.has(b));
+nearEdges.forEach(([a, b, t]) => {
+  const A = nodeById[a], B = nodeById[b];
+  const s = edgeStyle[t];
+  const path = el('path', {
+    d: bezierPath(A.x, A.y, B.x, B.y, 0.12),
+    stroke: s.color, 'stroke-width': s.width,
+    'stroke-linecap': 'round', fill: 'none',
+    opacity: s.opacity,
+  });
+  if (s.dash !== 'none') path.setAttribute('stroke-dasharray', s.dash);
+  svg.appendChild(path);
+});
+
+// ═════════ 4) 节点（带立体高光） ═════════
+function polygonPoints(cx, cy, r, sides, rotDeg) {
+  const pts = [];
+  for (let i = 0; i < sides; i++) {
+    const a = (Math.PI * 2 * i) / sides - Math.PI / 2 + (rotDeg * Math.PI) / 180;
+    pts.push(`${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`);
+  }
+  return pts.join(' ');
+}
+
+// 先画非远景节点
+nodes.filter(n => !n.far).forEach(n => {
+  const isRoot = !!n.root;
+  const fill = isRoot ? 'url(#nodeGold)' : 'url(#nodeBlue)';
+  const strokeCol = isRoot ? 'url(#strokeGold)' : 'url(#strokeBlue)';
+
+  if (n.type === 'dot') {
+    svg.appendChild(el('circle', {
+      cx: n.x, cy: n.y, r: n.r,
+      fill: '#cfe8fb', opacity: 0.7,
+    }));
+    return;
+  }
+
+  if (n.type === 'hex') {
+    svg.appendChild(el('polygon', {
+      points: polygonPoints(n.x, n.y, n.r, 6, 0),
+      fill, stroke: strokeCol, 'stroke-width': isRoot ? 3.5 : 2.4,
+      'stroke-linejoin': 'round',
+    }));
+  } else {
+    svg.appendChild(el('circle', {
+      cx: n.x, cy: n.y, r: n.r,
+      fill, stroke: strokeCol, 'stroke-width': 2.4,
+    }));
+  }
+
+  // 立体高光（偏左上）
+  const hl = el('ellipse', {
+    cx: n.x - n.r * 0.28, cy: n.y - n.r * 0.35,
+    rx: n.r * 0.42, ry: n.r * 0.28,
+    fill: 'rgba(255,255,255,0.85)', opacity: 0.9,
+    transform: `rotate(-30 ${n.x - n.r * 0.28} ${n.y - n.r * 0.35})`,
+  });
+  svg.appendChild(hl);
+
+  // 微光点
+  svg.appendChild(el('circle', {
+    cx: n.x - n.r * 0.15, cy: n.y - n.r * 0.2, r: Math.max(2, n.r * 0.12),
+    fill: 'rgba(255,255,255,0.95)',
+  }));
+});
+
+// ═════════ 5) 图例（更精致） ═════════
+const legend = [
+  { y: 40, t: 'Contains · 包含', color: 'rgba(150,205,250,0.9)', dash: 'none' },
+  { y: 76, t: 'Prerequisite · 先修', color: 'rgba(243,217,143,0.95)', dash: '10 7' },
+  { y: 112, t: 'Related · 关联', color: 'rgba(255,255,255,0.55)', dash: '3 6' },
+];
+legend.forEach(item => {
+  const g = el('g', {});
+  const ln = el('path', {
+    d: `M12 ${item.y} Q40 ${item.y - 5} 68 ${item.y}`,
+    stroke: item.color, 'stroke-width': 2.5, 'stroke-linecap': 'round', fill: 'none',
+  });
+  if (item.dash !== 'none') ln.setAttribute('stroke-dasharray', item.dash);
+  g.appendChild(ln);
+  const tx = el('text', {
+    x: 80, y: item.y + 5,
+    fill: 'rgba(220,236,251,0.85)', 'font-size': 17,
+    'font-family': 'Microsoft YaHei, 微软雅黑, sans-serif',
+    'letter-spacing': '1.5',
+  });
+  tx.textContent = item.t;
+  g.appendChild(tx);
+  svg.appendChild(g);
+});
+
+// ═════════ 6) 尺寸标注线（建筑制图风格） ═════════
+const dimStyle = 'rgba(180,214,246,0.25)';
+// 顶部水平尺寸
+const dimTop = el('g', {});
+dimTop.innerHTML = `
+  <line x1="200" y1="920" x2="1000" y2="920" stroke="${dimStyle}" stroke-width="1"/>
+  <line x1="200" y1="912" x2="200" y2="928" stroke="${dimStyle}" stroke-width="1"/>
+  <line x1="1000" y1="912" x2="1000" y2="928" stroke="${dimStyle}" stroke-width="1"/>
+  <text x="600" y="935" text-anchor="middle" font-size="13" fill="${dimStyle}"
+    font-family="Times New Roman" letter-spacing="2">800 px</text>
+`;
+svg.appendChild(dimTop);
+</script>
+</body>
+</html>

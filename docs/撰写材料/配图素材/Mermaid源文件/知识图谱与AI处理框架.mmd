@@ -1,0 +1,12 @@
+flowchart LR
+    A["📄 文档解析<br/>──────<br/>多格式上传<br/>PDF/Word/PPT<br/>文本提取清洗"]
+    B["🧠 知识抽取<br/>──────<br/>jieba 中文分词<br/>LLM 大模型抽取<br/>关系映射与修正"]
+    C["🕸️ 图谱构建<br/>──────<br/>节点关系去重<br/>层级结构构建<br/>G6 力导向渲染"]
+    D["💬 智能问答<br/>──────<br/>RAG 检索召回<br/>上下文 Prompt<br/>答案生成 + 溯源"]
+    
+    A --> B --> C --> D
+    
+    style A fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style B fill:#fef3c7,stroke:#d97706,stroke-width:2px
+    style C fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style D fill:#dcfce7,stroke:#16a34a,stroke-width:2px

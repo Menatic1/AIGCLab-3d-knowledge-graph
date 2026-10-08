@@ -3,10 +3,25 @@ import { Upload, Zap, ArrowRight, Sparkles } from 'lucide-react';
 import FileUploader from '../components/upload/FileUploader';
 import UploadProgress from '../components/upload/UploadProgress';
 import { useKnowledge } from '../context/KnowledgeContext';
+import { useAuth } from '../context/AuthContext';
 
 export default function UploadPage() {
   const { documents, addDocument, triggerParse, loadSampleGraph, hasGraph, graph } = useKnowledge();
   const { openTab } = useTabs();
+  const { user } = useAuth();
+
+  if (user?.role !== 'teacher') {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="sketch-card p-8 max-w-md text-center">
+          <Upload size={34} className="mx-auto mb-4 text-sketch-orangeDeep" />
+          <h2 className="text-xl font-bold text-ink handwritten mb-2">教师专属功能</h2>
+          <p className="text-sm text-ink-light mb-5">学生账号暂不支持上传或解析课程文档，你仍可以浏览图谱、学习知识点并向 AI 助教提问。</p>
+          <button onClick={() => openTab('graph')} className="sketch-btn-primary">返回知识图谱 <ArrowRight size={14} /></button>
+        </div>
+      </div>
+    );
+  }
 
   const handleFiles = (files: FileList) => {
     Array.from(files).forEach((f) => addDocument(f));

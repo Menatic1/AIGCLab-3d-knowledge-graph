@@ -1,0 +1,68 @@
+flowchart TB
+
+    %% ========== 教师端 ==========
+    subgraph TEACHER["👨‍🏫 教师端功能路径"]
+        direction TB
+        T1[登录注册<br/>选择教师身份]:::tLogin
+        T2[工作台<br/>课程统计·快捷入口]:::tShared
+        T3[/创建课程<br/>填写课程信息/]:::tTeacher
+        T4{获取图谱<br/>三种方式}:::tShared
+        T5[/文档上传解析/]:::tTeacher
+        T6[/AIGC 主题生成/]:::tShared
+        T7[/加载示例图谱/]:::tShared
+        T8{{知识图谱<br/>3D 可视化查看}}:::tShared
+        T9[/编辑图谱<br/>节点/关系增删改/]:::tTeacher
+        T10[图谱持久化<br/>写入数据库]:::tShared
+
+        T1 --> T2
+        T2 --> T3
+        T3 -->|"关联独立图谱"| T4
+        T2 --> T4
+        T4 --> T5 & T6 & T7
+        T5 & T6 & T7 -->|"生成图谱数据"| T8
+        T8 -->|"发现需调整"| T9
+        T9 -->|"保存"| T10
+        T10 -->|"刷新后保留"| T8
+    end
+
+    %% ========== 学生端 ==========
+    subgraph STUDENT["🎓 学生端功能路径"]
+        direction TB
+        S1[登录注册<br/>选择学生身份]:::sLogin
+        S2[工作台<br/>学习统计·快捷入口]:::sShared
+        S3[/加入课程<br/>进入学习空间/]:::sStudent
+        S4{{知识图谱<br/>探索知识点}}:::sShared
+        S5[详细学习<br/>节点详情·多模态资源]:::sShared
+        S6[智能问答<br/>不懂就问]:::sShared
+        S7[/知识小测试<br/>答题检验/]:::sStudent
+        S8[/学习报告<br/>正确率·薄弱分析/]:::sStudent
+        S9[学习路径<br/>前置依赖·进度]:::sShared
+        S10[相关学习资源<br/>AI推荐·拓展]:::sShared
+        S11[/学习偏好设置<br/>调整推荐策略/]:::sStudent
+        S12[访客中心<br/>3D校园漫游]:::sShared
+
+        S1 --> S2
+        S2 --> S3
+        S3 -->|"课程图谱"| S4
+        S2 --> S4
+        S4 -->|"点击节点"| S5
+        S4 -->|"前置关系"| S9
+        S5 -->|"遇到问题"| S6
+        S5 -->|"学完检验"| S7
+        S7 -->|"成绩记录"| S8
+        S8 -->|"薄弱推荐"| S10
+        S8 -->|"分析结果"| S11
+        S11 -->|"调整策略"| S9
+        S9 -->|"指导下一步"| S5
+        S2 --> S12
+    end
+
+    classDef tLogin fill:#f0f0f0,stroke:#8a847e,stroke-width:2px,color:#3b332b
+    classDef tShared fill:#e8f0e8,stroke:#5a8a5a,stroke-width:2px,color:#3a6a3a
+    classDef tTeacher fill:#fde8e0,stroke:#d97757,stroke-width:2px,color:#a8442a
+    classDef sLogin fill:#f0f0f0,stroke:#8a847e,stroke-width:2px,color:#3b332b
+    classDef sShared fill:#e8f0e8,stroke:#5a8a5a,stroke-width:2px,color:#3a6a3a
+    classDef sStudent fill:#e8e8f0,stroke:#5a5a9a,stroke-width:2px,color:#3a3a6a
+
+    style TEACHER fill:#fdf5f0,stroke:#e8c8b0
+    style STUDENT fill:#f0f0fa,stroke:#b0b8e0

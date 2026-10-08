@@ -8,7 +8,6 @@ from __future__ import annotations
 import hashlib
 import re
 import time
-import uuid
 from urllib.parse import quote
 
 import httpx
@@ -17,7 +16,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from .. import models
-from ..auth import get_current_user
 from ..database import get_db
 from ..llm_client import generate_graph_by_topic, suggest_learning_resources
 
@@ -27,6 +25,7 @@ router = APIRouter(prefix="/api/aigc", tags=["aigc"])
 class GenerateRequest(BaseModel):
     topic: str = Field(..., min_length=1, max_length=200, description="课程主题，如「计算机网络」")
     model: str | None = Field(None, description="可选，覆盖默认模型")
+    course_id: int | None = Field(None, description="课程 ID")
 
 
 class SuggestRequest(BaseModel):
@@ -36,118 +35,60 @@ class SuggestRequest(BaseModel):
     model: str | None = None
 
 
-def _upsert_graph_result(
-    db: Session, result, *, graph_id: str, user_id: str, document_id=None,
-) -> None:
-    """把 ExtractResult 写入 KGNode/KGRelation（按 id upsert）。
-
-    节点 ID 加 graph_id 前缀避免跨图谱冲突。
-    """
-    prefix = f"{graph_id[:8]}_"  # 短前缀，保持节点 id 可读
-    id_map: dict[str, str] = {}  # 原始 id -> 加前缀后的全局唯一 id
-
+def _upsert_graph_result(db: Session, result, document_id=None, course_id=None) -> None:
+    """把 ExtractResult 写入 KGNode/KGRelation（按 id upsert）。"""
+    id_prefix = f"c{course_id}_" if course_id is not None else ""
     node_map: dict[str, models.KGNode] = {}
     for n in result.nodes:
-        orig_id = n["id"]
-        new_id = f"{prefix}{orig_id}"
-        id_map[orig_id] = new_id
-        row = db.query(models.KGNode).filter(models.KGNode.id == new_id).first()
+        nid = f"{id_prefix}{n['id']}"
+        row = db.query(models.KGNode).filter(models.KGNode.id == nid).first()
         if row:
             row.name = n["name"]
             row.category = n["category"]
             row.description = n["description"]
             row.difficulty = float(n.get("difficulty") or 3.0)
-            row.graph_id = graph_id
-            row.user_id = user_id
+            row.course_id = course_id
         else:
             row = models.KGNode(
-                id=new_id, name=n["name"], category=n["category"],
+                id=nid, name=n["name"], category=n["category"],
                 description=n["description"], difficulty=float(n.get("difficulty") or 3.0),
-                document_id=document_id, graph_id=graph_id, user_id=user_id,
+                document_id=document_id, course_id=course_id,
             )
             db.add(row)
-        node_map[row.id] = row
+        node_map[n["id"]] = row
     db.flush()
 
     for r in result.relations:
-        src = id_map.get(r["source"])
-        tgt = id_map.get(r["target"])
+        src = node_map.get(r["source"])
+        tgt = node_map.get(r["target"])
         if not src or not tgt:
             continue
-        new_rel_id = f"{prefix}{r['id']}"
-        row = db.query(models.KGRelation).filter(models.KGRelation.id == new_rel_id).first()
+        rid = f"{id_prefix}{r['id']}"
+        row = db.query(models.KGRelation).filter(models.KGRelation.id == rid).first()
         if row:
-            row.source = src
-            row.target = tgt
             row.type = r["type"]
             row.label = r["label"]
-            row.graph_id = graph_id
-            row.user_id = user_id
+            row.course_id = course_id
         else:
             db.add(models.KGRelation(
-                id=new_rel_id, source=src, target=tgt,
-                type=r["type"], label=r["label"], document_id=document_id,
-                graph_id=graph_id, user_id=user_id,
+                id=rid, source=src.id, target=tgt.id,
+                type=r["type"], label=r["label"], document_id=document_id, course_id=course_id,
             ))
     db.commit()
 
 
 @router.post("/generate")
-async def generate_graph(
-    payload: GenerateRequest,
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
-    """围绕课程主题，调用大模型生成知识图谱，写入数据库并返回。
-
-    每次生成都会创建一份独立的 KnowledgeGraph 记录，节点 ID 加前缀避免冲突。
-    """
+async def generate_graph(payload: GenerateRequest, db: Session = Depends(get_db)):
+    """围绕课程主题，调用大模型生成知识图谱，写入数据库并返回。"""
     result = await generate_graph_by_topic(payload.topic, model=payload.model)
 
-    # 创建一份独立的图谱元数据记录
-    graph_id = uuid.uuid4().hex
-    g = models.KnowledgeGraph(
-        id=graph_id,
-        user_id=user.id,
-        title=payload.topic,
-        source="aigc",
-        source_ref=payload.topic,
-        description=f"AIGC 围绕「{payload.topic}」自动生成的知识图谱",
-        nodes_count=len(result.nodes),
-        relations_count=len(result.relations),
-    )
-    db.add(g)
-    db.commit()
-
     if result.nodes:
-        _upsert_graph_result(db, result, graph_id=graph_id, user_id=user.id, document_id=None)
-        # 重新统计计数（防 upsert 时漏计）
-        from .graphs import _refresh_counts
-        _refresh_counts(db, graph_id)
-
-    # 返回时把节点/关系 id 还原成「原始 id」，方便前端 mapBackendGraph 不感知前缀
-    # （前端 GraphPage 加载时会通过 GET /api/graphs/{id} 拿到真实带前缀 id，
-    #   这里只在「生成后立即注入」的旧路径上提供去前缀版本，保持向下兼容）
-    prefix = f"{graph_id[:8]}_"
-    raw_nodes = [
-        {**n, "id": n["id"][len(prefix):] if n["id"].startswith(prefix) else n["id"]}
-        for n in result.nodes
-    ]
-    raw_rels = [
-        {
-            **r,
-            "id": r["id"][len(prefix):] if r["id"].startswith(prefix) else r["id"],
-            "source": r["source"][len(prefix):] if r["source"].startswith(prefix) else r["source"],
-            "target": r["target"][len(prefix):] if r["target"].startswith(prefix) else r["target"],
-        }
-        for r in result.relations
-    ]
+        _upsert_graph_result(db, result, document_id=None, course_id=payload.course_id)
 
     return {
-        "graph_id": graph_id,
         "topic": payload.topic,
-        "nodes": raw_nodes,
-        "relations": raw_rels,
+        "nodes": result.nodes,
+        "relations": result.relations,
         "summary": result.raw_summary,
         "used_llm": result.used_llm,
         "nodes_count": len(result.nodes),

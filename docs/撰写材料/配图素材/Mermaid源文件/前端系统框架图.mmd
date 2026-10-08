@@ -1,0 +1,20 @@
+flowchart TB
+    P["📄 页面层 pages<br/>首页 · 登录 · 工作台<br/>图谱 · 问答 · 学习路径"]
+    C["🧩 组件层 components<br/>图谱 G6 · 3D Three.js<br/>导航栏 · 详情 · 问答框"]
+    S["📊 状态层 context<br/>TabContext · KnowledgeContext<br/>AuthContext · CourseContext"]
+    M["🛡️ 中间件 middleware<br/>路由守卫 · 权限检查<br/>认证拦截"]
+    Svc["🔌 服务层 services<br/>API封装 · 认证 · 课程<br/>图谱 · 问答"]
+    U["🔧 工具层 utils<br/>通用 · 图谱 · 格式化"]
+    
+    P --> S
+    C --> S
+    S --> Svc
+    M --> Svc
+    Svc --> U
+    
+    style P fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+    style C fill:#dcfce7,stroke:#16a34a,stroke-width:2px
+    style S fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style M fill:#ffedd5,stroke:#ea580c,stroke-width:2px
+    style Svc fill:#fce7f3,stroke:#db2777,stroke-width:2px
+    style U fill:#e0f2fe,stroke:#0284c7,stroke-width:2px

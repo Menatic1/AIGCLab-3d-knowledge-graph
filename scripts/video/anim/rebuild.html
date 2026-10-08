@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #04070e; }
+
+  #stage {
+    position: relative; width: 1920px; height: 1080px; overflow: hidden;
+    background:
+      radial-gradient(ellipse 1050px 720px at 50% 46%, rgba(90,150,230,0.16) 0%, rgba(90,150,230,0) 62%),
+      radial-gradient(ellipse 700px 900px at 6% 90%, rgba(70,120,200,0.10) 0%, rgba(70,120,200,0) 60%),
+      radial-gradient(ellipse 700px 900px at 96% 10%, rgba(60,110,190,0.10) 0%, rgba(60,110,190,0) 60%),
+      linear-gradient(165deg, #0b1c33 0%, #102a48 34%, #123254 52%, #0c1e39 76%, #071223 100%);
+  }
+  .grid-fine {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(150,195,240,0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(150,195,240,0.055) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .grid-bold {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(150,195,240,0.10) 1.5px, transparent 1.5px),
+      linear-gradient(90deg, rgba(150,195,240,0.10) 1.5px, transparent 1.5px);
+    background-size: 160px 160px;
+  }
+  .vig {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 1500px 1000px at 50% 50%, rgba(0,0,0,0) 42%, rgba(0,0,0,0.62) 100%);
+  }
+  svg { position: absolute; inset: 0; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="grid-fine"></div>
+  <div class="grid-bold"></div>
+  <svg id="svg" viewBox="0 0 1920 1080" width="1920" height="1080"></svg>
+  <div class="vig"></div>
+</div>
+
+<script>
+const W = 1920, H = 1080;
+const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+const easeOut = p => 1 - Math.pow(1 - p, 3);
+const easeInOut = p => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const seg = (t, a, b) => clamp01((t - a) / (b - a));
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+// 确定性伪随机（保证逐帧 seek 结果一致）
+function mkRng(seed) {
+  let s = seed >>> 0;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+const rnd = mkRng(20261008);
+
+// ── 目标图：一个中枢 + 三个知识点簇 ──
+const NODES = [];
+NODES.push({ x: 960, y: 452, r: 15, hue: '#f0c874', hub: true, id: 0 });
+const CLUSTERS = [
+  { cx: 618,  cy: 452, n: 9, rad: 216, hue: '#7fb2e8' },
+  { cx: 1302, cy: 452, n: 9, rad: 216, hue: '#7fe0c8' },
+  { cx: 960,  cy: 772, n: 7, rad: 178, hue: '#c9a0f0' },
+];
+for (const cl of CLUSTERS) {
+  for (let i = 0; i < cl.n; i++) {
+    const a = (i / cl.n) * Math.PI * 2 + cl.cx * 0.0013;
+    const rr = cl.rad * (0.60 + 0.40 * (((i * 37) % 10) / 10));
+    NODES.push({
+      x: cl.cx + Math.cos(a) * rr,
+      y: cl.cy + Math.sin(a) * rr * 0.80,
+      r: 6.5 + ((i * 13) % 4) * 1.7,
+      hue: cl.hue,
+      id: NODES.length,
+    });
+  }
+}
+
+// ── 碎片起点：散乱分布 ──
+const FRAG = NODES.map(() => ({
+  x: 130 + rnd() * (W - 260),
+  y: 120 + rnd() * (H - 240),
+  rot: (rnd() - 0.5) * 200,
+  w: 44 + rnd() * 62,
+  h: 28 + rnd() * 42,
+  d: rnd(),                       // 每片起始时间抖动
+}));
+
+// ── 边：每个节点连最近的 2 个（中枢连 6 个），去重 ──
+const EDGES = [];
+const seen = new Set();
+NODES.forEach(n => {
+  const near = NODES
+    .filter(m => m.id !== n.id)
+    .map(m => ({ m, d: Math.hypot(m.x - n.x, m.y - n.y) }))
+    .sort((a, b) => a.d - b.d);
+  near.slice(0, n.hub ? 6 : 2).forEach(o => {
+    const k = Math.min(n.id, o.m.id) + '-' + Math.max(n.id, o.m.id);
+    if (seen.has(k)) return;
+    seen.add(k);
+    EDGES.push({ a: n, b: o.m, k: EDGES.length, d: rnd() });
+  });
+});
+
+// ── 建 DOM ──
+const svg = document.getElementById('svg');
+const NS = SVGNS;
+function el(name, attrs) {
+  const e = document.createElementNS(NS, name);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+// 脉冲环
+const pulse = el('circle', { cx: 960, cy: 452, r: 10, fill: 'none', stroke: '#f0c874', 'stroke-width': 2, opacity: 0 });
+// 边层
+const gEdge = el('g', {});
+// 节点层
+const gNode = el('g', {});
+svg.appendChild(pulse); svg.appendChild(gEdge); svg.appendChild(gNode);
+
+const edgeEls = EDGES.map(e => {
+  const ln = el('line', {
+    x1: e.a.x, y1: e.a.y, x2: e.b.x, y2: e.b.y,
+    stroke: '#8fc4ea', 'stroke-width': 1.1, opacity: 0,
+  });
+  gEdge.appendChild(ln);
+  return { ln, len: Math.hypot(e.b.x - e.a.x, e.b.y - e.a.y), d: e.d };
+});
+
+const nodeEls = NODES.map((n, i) => {
+  const g = el('g', {});
+  const card = el('rect', {
+    x: -FRAG[i].w / 2, y: -FRAG[i].h / 2, width: FRAG[i].w, height: FRAG[i].h,
+    rx: 4, fill: 'rgba(150,195,240,0.13)', stroke: 'rgba(170,210,245,0.42)', 'stroke-width': 1.2,
+  });
+  const l1 = el('line', { x1: -FRAG[i].w * 0.3, y1: -FRAG[i].h * 0.16, x2: FRAG[i].w * 0.3, y2: -FRAG[i].h * 0.16, stroke: 'rgba(190,220,250,0.5)', 'stroke-width': 1.4 });
+  const l2 = el('line', { x1: -FRAG[i].w * 0.3, y1: FRAG[i].h * 0.10, x2: FRAG[i].w * 0.14, y2: FRAG[i].h * 0.10, stroke: 'rgba(190,220,250,0.36)', 'stroke-width': 1.4 });
+  const halo = el('circle', { r: n.r * 3.2, fill: n.hue, opacity: 0, filter: 'blur(0px)' });
+  const dot = el('circle', { r: n.r, fill: n.hue, opacity: 0, stroke: 'rgba(255,255,255,0.72)', 'stroke-width': 1.1 });
+  g.appendChild(card); g.appendChild(l1); g.appendChild(l2); g.appendChild(halo); g.appendChild(dot);
+  gNode.appendChild(g);
+  return { g, card, l1, l2, halo, dot };
+});
+
+// ── 逐帧绘制 ──
+function draw(t) {
+  // 脉冲：1.55s 扩散，宣告"重组"开始
+  const pa = seg(t, 1.45, 2.75);
+  pulse.setAttribute('r', (10 + easeOut(pa) * 1080).toFixed(1));
+  pulse.setAttribute('opacity', (pa <= 0 || pa >= 1 ? 0 : (1 - pa) * 0.52).toFixed(3));
+  pulse.setAttribute('stroke-width', (2 + pa * 1.6).toFixed(2));
+
+  // 碎片 → 节点：逐个错峰归位
+  const settle = [];
+  FRAG.forEach((f, i) => {
+    const st = 0.35 + f.d * 1.15 + i * 0.028;
+    const p = easeInOut(seg(t, st, st + 2.05));
+    settle.push(p);
+    const n = NODES[i];
+    const x = f.x + (n.x - f.x) * p;
+    const y = f.y + (n.y - f.y) * p;
+    const rot = f.rot * (1 - p);
+    const scale = 1 - 0.42 * p;
+    const e = nodeEls[i];
+    e.g.setAttribute('transform', `translate(${x.toFixed(2)},${y.toFixed(2)}) rotate(${rot.toFixed(2)}) scale(${scale.toFixed(3)})`);
+
+    // 卡片与节点交叉淡化
+    const cardOp = (1 - easeInOut(seg(p, 0.55, 0.92))) * (0.35 + 0.65 * easeOut(seg(t, 0.15, 0.9)));
+    e.card.setAttribute('opacity', cardOp.toFixed(3));
+    e.l1.setAttribute('opacity', cardOp.toFixed(3));
+    e.l2.setAttribute('opacity', cardOp.toFixed(3));
+    const dotP = easeOut(seg(p, 0.62, 1.0));
+    const breathe = 1 + 0.06 * Math.sin((t - 4.6) * 2.1 + i * 0.7) * seg(t, 4.6, 5.4);
+    e.dot.setAttribute('opacity', dotP.toFixed(3));
+    e.dot.setAttribute('r', (n.r * breathe).toFixed(2));
+    e.halo.setAttribute('opacity', (dotP * 0.16).toFixed(3));
+    e.halo.setAttribute('r', (n.r * 3.4 * breathe).toFixed(2));
+  });
+
+  // 连线：在节点归位后依次生长
+  edgeEls.forEach(e => {
+    const g = easeOut(seg(t, 3.15 + e.d * 0.95, 4.35 + e.d * 0.95));
+    e.ln.setAttribute('opacity', (g * 0.72).toFixed(3));
+    e.ln.setAttribute('stroke-dasharray', e.len.toFixed(1));
+    e.ln.setAttribute('stroke-dashoffset', (e.len * (1 - g)).toFixed(1));
+  });
+
+  // 收束：整体轻微缩放呼吸，避免结尾死板
+  const fin = seg(t, 4.4, 6.1);
+  svg.setAttribute('transform', `translate(960,540) scale(${(1 + 0.012 * easeOut(fin)).toFixed(4)}) translate(-960,-540)`);
+}
+
+window.__seek = t => draw(t);
+window.__ready = true;
+window.__seek(0);
+</script>
+</body>
+</html>
