@@ -36,6 +36,18 @@ pnpm-lock.yaml
 # Other competition projects (not this project)
 /赛题01_网新恒天_文档图片自动矫正系统/
 
+# 剪映自动化相关（非产品程序）
+/_vendor/
+/.dsh/
+/.venv-jianying/
+/capcut-draft-automation-report.md
+/scripts/extract-skill.py
+/scripts/fetch-jianying-skill.mjs
+/scripts/install-skill.py
+
+# 比赛提交素材（非产品程序）
+/赛题10_智绘千里_AIGC知识图谱智能导学系统/
+
 # Embedded repos / temp / share packages
 /新建文件夹/
 /.trae-html-share-packages/
